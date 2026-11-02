@@ -1,5 +1,5 @@
 --=====================================================================
---  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3
+--  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3.1
 --  Pure VFX: no character, no fight -- a living black hole.
 --  Loader:
 --  loadstring(game:HttpGet("https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/LEGENDS_Intro_VFX_Studio_v2.lua"))()
@@ -31,6 +31,12 @@ local function destroyPrevious()
     local roots = {workspace, Lighting}
     pcall(function()
         table.insert(roots, CoreGui)
+    end)
+    pcall(function()
+        local pg = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        if pg then
+            table.insert(roots, pg)
+        end
     end)
     for _, root in ipairs(roots) do
         pcall(function()
@@ -65,9 +71,25 @@ local function main()
     local shockPulse  = 0
     local saved       = {}
 
+    -- generation token: a newer execution invalidates this one (race guard)
+    local genv = (typeof(getgenv) == "function" and getgenv()) or _G
+    local myToken = {}
+    genv.LEGENDS_INTRO_TOKEN = myToken
+
+    local isTouch = false
+    pcall(function()
+        isTouch = game:GetService("UserInputService").TouchEnabled
+    end)
+
     local cam = workspace.CurrentCamera
-    if not cam then
-        cam = workspace:WaitForChild("Camera", 5)
+    local camWaited = 0
+    while not cam and camWaited < 8 do
+        task.wait(0.1)
+        camWaited = camWaited + 0.1
+        cam = workspace.CurrentCamera or workspace:FindFirstChildOfClass("Camera")
+    end
+    if genv.LEGENDS_INTRO_TOKEN ~= myToken then
+        return -- a newer execution took over while we waited
     end
     if not cam then
         error("no camera found")
@@ -123,6 +145,92 @@ local function main()
         atmo.Haze = 0
         atmo.Glare = 0
     end
+
+    --[[ emergency restore -- registered BEFORE the first mutation (v3.1) ]]--
+    local function emergencyRestore()
+        dead = true
+        pcall(function()
+            RunService:UnbindFromRenderStep("LEGENDS_Cam")
+        end)
+        pcall(function()
+            if loopConn then
+                loopConn:Disconnect()
+                loopConn = nil
+            end
+        end)
+        pcall(function()
+            local c = workspace.CurrentCamera or cam
+            if c then
+                c.CameraType  = saved.camType or Enum.CameraType.Custom
+                c.FieldOfView = saved.camFOV or 70
+                if saved.camCF and c == cam then
+                    c.CFrame = saved.camCF
+                end
+            end
+        end)
+        pcall(function()
+            local L = saved.lighting
+            if L then
+                Lighting.Ambient              = L.Ambient
+                Lighting.OutdoorAmbient       = L.OutdoorAmbient
+                Lighting.Brightness           = L.Brightness
+                Lighting.ClockTime            = L.ClockTime
+                Lighting.FogColor             = L.FogColor
+                Lighting.FogStart             = L.FogStart
+                Lighting.FogEnd               = L.FogEnd
+                Lighting.GlobalShadows        = L.GlobalShadows
+                Lighting.ExposureCompensation = L.ExposureCompensation
+            end
+        end)
+        pcall(function()
+            if saved.skyProps then
+                local s = saved.skyProps
+                local o = s.obj
+                if o and o.Parent then
+                    o.SkyboxBk = s.Bk
+                    o.SkyboxDn = s.Dn
+                    o.SkyboxFt = s.Ft
+                    o.SkyboxLf = s.Lf
+                    o.SkyboxRt = s.Rt
+                    o.SkyboxUp = s.Up
+                    o.SunVisible  = s.SunVisible
+                    o.MoonVisible = s.MoonVisible
+                    o.StarCount   = s.StarCount
+                end
+            end
+        end)
+        pcall(function()
+            if saved.atmoProps then
+                local a = Lighting:FindFirstChildOfClass("Atmosphere")
+                if a then
+                    a.Density = saved.atmoProps.Density
+                    a.Haze    = saved.atmoProps.Haze
+                    a.Glare   = saved.atmoProps.Glare
+                end
+            end
+        end)
+        pcall(function()
+            for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom"}) do
+                local o = Lighting:FindFirstChild(n)
+                if o then
+                    o:Destroy()
+                end
+            end
+        end)
+        pcall(function()
+            if sceneFolder then
+                sceneFolder:Destroy()
+                sceneFolder = nil
+            end
+        end)
+        pcall(function()
+            if gui then
+                gui:Destroy()
+                gui = nil
+            end
+        end)
+    end
+    genv.LEGENDS_INTRO_STOP = emergencyRestore
 
     --[[ lighting ]]--
     Lighting.Brightness           = 0
@@ -222,7 +330,7 @@ local function main()
     --[[ space enclosure -- guaranteed void background ]]--
     part({
         Name     = "BH_Space",
-        Size     = Vector3.new(4000, 4000, 4000),
+        Size     = Vector3.new(2048, 2048, 2048), -- Roblox per-axis cap; camera max dist ~570 stays inside
         Color    = Color3.new(0, 0, 0),
         Material = Enum.Material.SmoothPlastic,
         CFrame   = CFrame.new(HOLE),
@@ -253,6 +361,9 @@ local function main()
         CFrame       = CFrame.new(HOLE),
     })
 
+    -- disk tilt (v3.1 fix: declared BEFORE every structure that uses it)
+    local diskTilt = CFrame.Angles(math.rad(22), 0, math.rad(-8))
+
     -- photon ring
     local PHOTON_N   = 36
     local photonTilt = CFrame.Angles(math.rad(18), 0, math.rad(10))
@@ -281,16 +392,19 @@ local function main()
         })
     end
 
-    -- accretion disk (inner rings spin faster - Keplerian)
-    local diskTilt = CFrame.Angles(math.rad(22), 0, math.rad(-8))
+    -- accretion disk (5 rings, inner spin faster - Keplerian)
     local rings = {
-        {r = 24, n = 40, speed = 1.60, color = C_HOT,    sx = 1.5, sy = 0.9, sz = 3.0, base = 0.10},
-        {r = 33, n = 42, speed = 0.95, color = C_EMBER,  sx = 1.3, sy = 0.8, sz = 3.8, base = 0.20},
-        {r = 44, n = 46, speed = 0.60, color = C_PLASMA, sx = 1.2, sy = 0.7, sz = 4.6, base = 0.30},
+        {r = 22.5, n = 44, speed = 1.90, color = C_HOT,    sx = 1.4, sy = 0.7, sz = 2.6, base = 0.05},
+        {r = 26, n = 46, speed = 1.45, color = C_HOT,    sx = 1.5, sy = 0.9, sz = 3.0, base = 0.10},
+        {r = 33, n = 48, speed = 1.00, color = C_EMBER,  sx = 1.3, sy = 0.8, sz = 3.8, base = 0.20},
+        {r = 42, n = 52, speed = 0.65, color = C_PLASMA, sx = 1.2, sy = 0.7, sz = 4.6, base = 0.30},
+        {r = 53, n = 56, speed = 0.42, color = C_PLASMA, sx = 1.1, sy = 0.6, sz = 5.2, base = 0.42},
     }
     local diskSegs = {}
+    local diskScale = isTouch and 0.55 or 1
     for ri, ring in ipairs(rings) do
-        for i = 1, ring.n do
+        local n = math.max(14, math.floor(ring.n * diskScale + 0.5))
+        for i = 1, n do
             local seg = part({
                 Name         = "BH_Disk",
                 Size         = Vector3.new(ring.sx, ring.sy, ring.sz),
@@ -302,7 +416,7 @@ local function main()
                 part   = seg,
                 ring   = ri,
                 i      = i,
-                n      = ring.n,
+                n      = n,
                 jitter = math.random() * math.pi * 2,
             }
         end
@@ -327,6 +441,44 @@ local function main()
         addTrail(d, C_ICE)
     end
 
+    -- plasma knots: bright chunks riding the disk with trails
+    local hotspots = {}
+    for i = 1, 7 do
+        local h = part({
+            Name   = "BH_HotSpot",
+            Size   = Vector3.new(1, 1, 1) * (2 + math.random() * 1.5),
+            Color  = C_HOT,
+            CFrame = CFrame.new(HOLE),
+        })
+        addTrail(h, C_EMBER)
+        hotspots[i] = {
+            part = h,
+            r    = 24 + math.random() * 26,
+            ang  = math.random() * math.pi * 2,
+            spd  = 0.9 + math.random() * 0.9,
+            hgt  = (math.random() - 0.5) * 4,
+        }
+    end
+
+    -- flare arcs: random magnetic flares flashing on the rim
+    local flares = {}
+    for i = 1, 14 do
+        flares[i] = {
+            part = part({
+                Name         = "BH_Flare",
+                Size         = Vector3.new(0.6, 0.6, 3.4),
+                Color        = C_HOT,
+                Transparency = 1,
+                CFrame       = CFrame.new(HOLE),
+            }),
+            next = 1 + math.random() * 4,
+            life = 0,
+            max  = 0.5 + math.random() * 0.4,
+            ang  = 0,
+            r    = 25 + math.random() * 8,
+        }
+    end
+
     -- starfield
     local stars = {}
     for i = 1, CONFIG.STAR_COUNT do
@@ -345,11 +497,19 @@ local function main()
         }
     end
 
-    -- twinkling stars subset
+    -- twinkling stars subset (unique stars, shuffled)
     local twinkle = {}
-    for i = 1, 50 do
+    local tidx = {}
+    for i = 1, #stars do
+        tidx[i] = i
+    end
+    for i = #tidx, 2, -1 do
+        local j = math.random(i)
+        tidx[i], tidx[j] = tidx[j], tidx[i]
+    end
+    for i = 1, math.min(isTouch and 24 or 50, #tidx) do
         twinkle[i] = {
-            part  = stars[math.random(#stars)].part,
+            part  = stars[tidx[i]].part,
             phase = math.random() * math.pi * 2,
         }
     end
@@ -393,6 +553,27 @@ local function main()
             Transparency = 0.1 + math.random() * 0.4,
             CFrame       = galaxyCF * CFrame.Angles(0, a, 0) * CFrame.new(rr, y, 0),
         })
+    end
+
+    -- relativistic polar jets (quasar beams up + down)
+    local jets = {}
+    for _, sgn in ipairs({1, -1}) do
+        local beam = part({
+            Name         = "BH_Jet",
+            Size         = Vector3.new(4, 240, 4),
+            Color        = C_ICE,
+            Transparency = 0.88,
+            CFrame       = CFrame.new(HOLE + Vector3.new(0, sgn * 130, 0)),
+        })
+        local tip = part({
+            Name         = "BH_JetTip",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(14, 14, 14),
+            Color        = C_ICE,
+            Transparency = 0.92,
+            CFrame       = CFrame.new(HOLE + Vector3.new(0, sgn * 250, 0)),
+        })
+        jets[#jets + 1] = { beam = beam, tip = tip, seed = math.random() * 10 }
     end
 
     -- shockwaves
@@ -443,7 +624,7 @@ local function main()
             local ring = rings[s.ring]
             local a  = (s.i / s.n) * math.pi * 2 + t * ring.speed + s.jitter * 0.05
             local rr = ring.r + 0.8 * math.sin(t * 2 + s.jitter)
-            s.part.Transparency = ring.base + 0.12 * math.sin(t * 3 + s.jitter)
+            s.part.Transparency = math.clamp(ring.base + 0.12 * math.sin(t * 3 + s.jitter), 0, 1)
             s.part.CFrame = CFrame.new(HOLE) * diskTilt
                 * CFrame.Angles(0, a, 0)
                 * CFrame.new(rr, 0, 0)
@@ -474,18 +655,25 @@ local function main()
     local suckTimer = 0
 
     local function pickSucked()
-        local picked = 0
+        local pool = {}
         for _, st in ipairs(stars) do
-            if picked >= 3 then break end
             if not st.sucked then
-                local off = st.home - HOLE
-                st.sucked = true
-                st.p  = 0
-                st.r0 = off.Magnitude
-                st.a0 = math.atan2(off.Z, off.X)
-                st.h0 = off.Y
-                picked = picked + 1
+                pool[#pool + 1] = st
             end
+        end
+        for _ = 1, 3 do
+            if #pool == 0 then
+                break
+            end
+            local k  = math.random(#pool)
+            local st = pool[k]
+            table.remove(pool, k)
+            local off = st.home - HOLE
+            st.sucked = true
+            st.p  = 0
+            st.r0 = off.Magnitude
+            st.a0 = math.atan2(off.Z, off.X)
+            st.h0 = off.Y
         end
     end
 
@@ -508,6 +696,48 @@ local function main()
                     st.part.CFrame = CFrame.new(HOLE + off)
                 end
             end
+        end
+    end
+
+    local function updateHotspots(t, dt)
+        for _, hs in ipairs(hotspots) do
+            hs.ang = hs.ang + dt * hs.spd
+            local w = 1.6 * math.sin(t * 2 + hs.ang * 3)
+            hs.part.CFrame = CFrame.new(HOLE) * diskTilt
+                * CFrame.Angles(0, hs.ang, 0)
+                * CFrame.new(hs.r + w, hs.hgt, 0)
+        end
+    end
+
+    local function updateFlares(dt, t)
+        for _, f in ipairs(flares) do
+            f.next = f.next - dt
+            if f.next <= 0 and f.life <= 0 then
+                f.life = f.max
+                f.ang  = math.random() * math.pi * 2
+                f.r    = 25 + math.random() * 8
+                f.next = 1.2 + math.random() * 3.2
+            end
+            if f.life > 0 then
+                f.life = f.life - dt
+                local k = math.clamp(f.life / f.max, 0, 1)
+                f.part.Transparency = 1 - k * 0.85
+                f.part.Size = Vector3.new(0.6, 0.6, 3.4 + (1 - k) * 3)
+                f.part.CFrame = CFrame.new(HOLE) * diskTilt
+                    * CFrame.Angles(0, f.ang + t * 1.4, 0)
+                    * CFrame.new(f.r, 0, 0)
+            else
+                f.part.Transparency = 1
+            end
+        end
+    end
+
+    local function updateJets(t, dive)
+        local vis = 1 - math.clamp((dive - 0.3) / 0.35, 0, 1)
+        for _, j in ipairs(jets) do
+            local f = 0.5 + 0.5 * math.sin(t * 2.1 + j.seed)
+            j.beam.Transparency = 1 - vis * (0.14 + f * 0.10)
+            j.tip.Transparency  = 1 - vis * (0.08 + f * 0.04)
         end
     end
 
@@ -575,7 +805,21 @@ local function main()
         gui.Parent = CoreGui
     end)
     if not okCore then
-        gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+        local lp = Players.LocalPlayer
+        local pg = lp and lp:FindFirstChildOfClass("PlayerGui")
+        if not pg and lp then
+            pg = lp:WaitForChild("PlayerGui", 5)
+        end
+        -- a newer execution may have taken over during the yield above
+        if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken then
+            gui:Destroy()
+            return
+        end
+        if pg then
+            gui.Parent = pg
+        else
+            error("no PlayerGui found")
+        end
     end
 
     local function newFrame(z, trans, color)
@@ -601,10 +845,10 @@ local function main()
         })
         g.Parent = f
     end
-    vignette(90,  UDim2.new(0, 0, 0, 0),    UDim2.new(1, 0, 0, 150))
-    vignette(-90, UDim2.new(0, 0, 1, -150), UDim2.new(1, 0, 0, 150))
-    vignette(0,   UDim2.new(0, 0, 0, 0),    UDim2.new(0, 150, 1, 0))
-    vignette(180, UDim2.new(1, -150, 0, 0), UDim2.new(0, 150, 1, 0))
+    vignette(90,  UDim2.new(0, 0, 0, 0),    UDim2.new(1, 0, 0, 96))
+    vignette(-90, UDim2.new(0, 0, 1, -96),  UDim2.new(1, 0, 0, 96))
+    vignette(0,   UDim2.new(0, 0, 0, 0),    UDim2.new(0, 96, 1, 0))
+    vignette(180, UDim2.new(1, -96, 0, 0),  UDim2.new(0, 96, 1, 0))
 
     local blackout = newFrame(8, 1)
     blackout.Size = UDim2.new(1, 0, 1, 0)
@@ -681,8 +925,8 @@ local function main()
     -- skip button
     local skip = Instance.new("TextButton")
     skip.AnchorPoint            = Vector2.new(1, 1)
-    skip.Position               = UDim2.new(1, -18, 1, -18)
-    skip.Size                   = UDim2.new(0, 132, 0, 36)
+    skip.Position               = UDim2.new(1, -22, 1, -22)
+    skip.Size                   = UDim2.new(0, 150, 0, 44)
     skip.BackgroundColor3       = Color3.new(0, 0, 0)
     skip.BackgroundTransparency = 0.55
     skip.Font                   = Enum.Font.GothamBold
@@ -704,6 +948,9 @@ local function main()
         if dead then return end
         dead = true
         pcall(function()
+            RunService:UnbindFromRenderStep("LEGENDS_Cam")
+        end)
+        pcall(function()
             if loopConn then
                 loopConn:Disconnect()
                 loopConn = nil
@@ -717,10 +964,13 @@ local function main()
             end
         end)
         pcall(function()
-            cam.CameraType  = saved.camType or Enum.CameraType.Custom
-            cam.FieldOfView = saved.camFOV or 70
-            if saved.camCF then
-                cam.CFrame = saved.camCF
+            local c = workspace.CurrentCamera or cam
+            if c then
+                c.CameraType  = saved.camType or Enum.CameraType.Custom
+                c.FieldOfView = saved.camFOV or 70
+                if saved.camCF and c == cam then
+                    c.CFrame = saved.camCF
+                end
             end
         end)
         pcall(function()
@@ -765,12 +1015,9 @@ local function main()
             end
         end)
         pcall(function()
-            for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom"}) do
-                local o = Lighting:FindFirstChild(n)
-                if o then
-                    o:Destroy()
-                end
-            end
+            cc:Destroy()
+            blur:Destroy()
+            bloom:Destroy()
         end)
         pcall(function()
             if sceneFolder then
@@ -797,15 +1044,24 @@ local function main()
     end)
 
     --[[ camera director ]]--
+    -- a newer execution or cleanup may have fired during init yields
+    if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken then
+        cleanup()
+        return
+    end
+    -- re-snapshot camera right before takeover (it may have drifted during init)
+    saved.camType = cam.CameraType
+    saved.camCF   = cam.CFrame
+    saved.camFOV  = cam.FieldOfView
     cam.CameraType = Enum.CameraType.Scriptable
 
     local CAM = {
-        {t0 = 0,  t1 = 9,  r0 = 560, r1 = 470, h0 = 30,  h1 = 60,  w0 = 0.05, fov0 = 72, fov1 = 64, rollA = 0,  shake = 0.15, a0 = -0.40, ease = 0},
+        {t0 = 0,  t1 = 9,  r0 = 560, r1 = 470, h0 = 30,  h1 = 60,  w0 = 0.05, fov0 = 72, fov1 = 64, rollA = 0,  shake = 0.15, a0 = -0.40, ease = 1},
         {t0 = 9,  t1 = 20, r0 = 470, r1 = 200, h0 = 60,  h1 = 85,  w0 = 0.13, fov0 = 64, fov1 = 58, rollA = 4,  shake = 0.30, a0 = 0.05,  ease = 1},
         {t0 = 20, t1 = 34, r0 = 200, r1 = 100, h0 = 85,  h1 = 45,  w0 = 0.21, fov0 = 58, fov1 = 70, rollA = 9,  shake = 0.80, a0 = 1.48,  ease = 1},
         {t0 = 34, t1 = 44, r0 = 100, r1 = 280, h0 = 45,  h1 = 120, w0 = 0.10, fov0 = 70, fov1 = 64, rollA = 3,  shake = 0.40, a0 = 4.42,  ease = 1},
-        {t0 = 44, t1 = 52, r0 = 280, r1 = 16,  h0 = 120, h1 = 8,   w0 = 0.27, fov0 = 64, fov1 = 86, rollA = 14, shake = 1.70, a0 = 5.42,  ease = 2},
-        {t0 = 52, t1 = 58, r0 = 16,  r1 = 14,  h0 = 8,   h1 = 6,   w0 = 0.15, fov0 = 86, fov1 = 92, rollA = 2,  shake = 0.50, a0 = 7.58,  ease = 0},
+        {t0 = 44, t1 = 52, r0 = 280, r1 = 18,  h0 = 120, h1 = 8,   w0 = 0.27, fov0 = 64, fov1 = 86, rollA = 14, shake = 1.70, a0 = 5.42,  ease = 2},
+        {t0 = 52, t1 = 58, r0 = 18,  r1 = 17,  h0 = 8,   h1 = 6,   w0 = 0.15, fov0 = 86, fov1 = 92, rollA = 2,  shake = 0.50, a0 = 7.58,  ease = 0},
     }
 
     local function easeSm(u)
@@ -846,9 +1102,11 @@ local function main()
 
     --[[ beats ]]--
     task.delay(1.2, function()
+        if dead then return end
         tw(presents, {TextTransparency = 0.05, TextStrokeTransparency = 0.6}, 1.6)
     end)
     task.delay(5.5, function()
+        if dead then return end
         tw(presents, {TextTransparency = 1, TextStrokeTransparency = 1}, 1.4)
     end)
     task.delay(44, function()
@@ -856,9 +1114,13 @@ local function main()
         riser:Play()
         TweenService:Create(riser, TweenInfo.new(7, Enum.EasingStyle.Linear), {Volume = 0.85}):Play()
     end)
-    task.delay(49.4, function()
+    task.delay(50.6, function()
         if dead then return end
-        tw(blackout, {BackgroundTransparency = 0}, 2.6)
+        tw(blackout, {BackgroundTransparency = 0}, 1.2)
+    end)
+    task.delay(52.6, function()
+        if dead then return end
+        tw(blackout, {BackgroundTransparency = 0.78}, 1.6)
     end)
     task.delay(52, function()
         if dead then return end
@@ -902,7 +1164,7 @@ local function main()
 
     local function stepFrame(dtStep)
         local dt = math.clamp(dtStep, 0.001, 0.1)
-        elapsed  = elapsed + dtStep
+        elapsed  = elapsed + math.clamp(dtStep, 0, 0.25)
         local t  = elapsed
 
         while shockIdx <= #CONFIG.SHOCK_TIMES and t >= CONFIG.SHOCK_TIMES[shockIdx] do
@@ -914,9 +1176,11 @@ local function main()
 
         suckTimer = suckTimer + dt
         if suckTimer >= CONFIG.SUCK_EVERY then
-            suckTimer = 0
+            suckTimer = suckTimer - CONFIG.SUCK_EVERY
             pickSucked()
         end
+
+        local dive = math.clamp((t - 44) / 8, 0, 1)
 
         updatePhoton(t)
         updateLens(t)
@@ -925,12 +1189,14 @@ local function main()
         updateSucked(dt)
         updateShocks(dt)
         updateTwinkle(t)
+        updateHotspots(t, dt)
+        updateFlares(dt, t)
+        updateJets(t, dive)
 
         shockPulse = shockPulse * (1 - dt * 2.2)
         glowPulse  = glowPulse * (1 - dt * 3)
-        local dive = math.clamp((t - 44) / 8, 0, 1)
 
-        blur.Size      = shockPulse * 14 + dive * 22
+        blur.Size      = math.min(shockPulse * 14 + dive * 22, isTouch and 14 or 40)
         cc.Brightness  = shockPulse * 0.10 - dive * 0.08
         cc.Contrast    = 0.08 + dive * 0.22
         cc.Saturation  = -0.05 - dive * 0.25
@@ -940,6 +1206,7 @@ local function main()
         glow.Size         = Vector3.new(1, 1, 1) * (40 + glowPulse * 6)
         glow.Transparency = 0.95 - glowPulse * 0.05
         plight.Brightness = 1.5 + glowPulse * 1.2
+        core.Size         = Vector3.new(1, 1, 1) * (26 + 0.9 * math.sin(t * 2.6) + glowPulse * 1.2)
 
         local camNow = workspace.CurrentCamera
         if camNow then
@@ -958,8 +1225,8 @@ local function main()
         end
     end
 
-    loopConn = RunService.RenderStepped:Connect(function(dtStep)
-        if dead then return end
+    local function camStep(dtStep)
+        if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken then return end
         local ok, err = pcall(stepFrame, dtStep)
         if not ok then
             warn("[LEGENDS] frame error:", err)
@@ -967,7 +1234,20 @@ local function main()
         if elapsed >= CONFIG.DURATION + 2 then
             cleanup()
         end
+    end
+
+    -- camera-priority render bind (beats game camera controllers); fallback to RenderStepped
+    pcall(function()
+        RunService:UnbindFromRenderStep("LEGENDS_Cam")
     end)
+    local boundOk = false
+    pcall(function()
+        RunService:BindToRenderStep("LEGENDS_Cam", Enum.RenderPriority.Camera.Value + 1, camStep)
+        boundOk = true
+    end)
+    if not boundOk then
+        loopConn = RunService.RenderStepped:Connect(camStep)
+    end
 end
 
 --=====================================================================
@@ -977,6 +1257,12 @@ local OK, ERR = pcall(main)
 if not OK then
     warn("[LEGENDS] intro error:", ERR)
     pcall(function()
+        local genv = (typeof(getgenv) == "function" and getgenv()) or _G
+        if type(genv.LEGENDS_INTRO_STOP) == "function" then
+            genv.LEGENDS_INTRO_STOP()
+        end
+    end)
+    pcall(function()
         local g = Instance.new("ScreenGui")
         g.Name          = "LEGENDS_ERR"
         g.DisplayOrder  = 10000
@@ -985,7 +1271,12 @@ if not OK then
             g.Parent = game:GetService("CoreGui")
         end)
         if not okc then
-            g.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+            local lp = Players.LocalPlayer
+            local pg = lp and (lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui", 3))
+            if not pg then
+                return -- cannot surface the error visually
+            end
+            g.Parent = pg
         end
         local tl = Instance.new("TextLabel")
         tl.Size                   = UDim2.new(0.9, 0, 0, 60)
