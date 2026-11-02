@@ -16,7 +16,7 @@ local CONFIG = {
     DURATION     = 58,
     HOLE_POS     = Vector3.new(0, 1500, 0),
     STAR_COUNT   = 170,
-    DEBRIS_COUNT = 30,
+    DEBRIS_COUNT = 44,
     SHOCK_TIMES  = {13, 20, 27, 34, 41, 47},
     SUCK_EVERY   = 2.8,
 }
@@ -42,6 +42,14 @@ local function destroyPrevious()
         end)
     end
 end
+
+-- stop any previous run before starting fresh
+pcall(function()
+    local genv = (typeof(getgenv) == "function" and getgenv()) or _G
+    if type(genv.LEGENDS_INTRO_STOP) == "function" then
+        genv.LEGENDS_INTRO_STOP()
+    end
+end)
 
 destroyPrevious()
 
@@ -78,6 +86,43 @@ local function main()
         GlobalShadows        = Lighting.GlobalShadows,
         ExposureCompensation = Lighting.ExposureCompensation,
     }
+
+    -- blank any custom sky (gray skybox fix) + kill haze
+    saved.skyProps = nil
+    local oldSky = Lighting:FindFirstChildOfClass("Sky")
+    if oldSky then
+        saved.skyProps = {
+            obj = oldSky,
+            Bk = oldSky.SkyboxBk, Dn = oldSky.SkyboxDn, Ft = oldSky.SkyboxFt,
+            Lf = oldSky.SkyboxLf, Rt = oldSky.SkyboxRt, Up = oldSky.SkyboxUp,
+            SunVisible = oldSky.SunVisible, MoonVisible = oldSky.MoonVisible,
+            StarCount = oldSky.StarCount,
+        }
+        pcall(function()
+            oldSky.SkyboxBk = ""
+            oldSky.SkyboxDn = ""
+            oldSky.SkyboxFt = ""
+            oldSky.SkyboxLf = ""
+            oldSky.SkyboxRt = ""
+            oldSky.SkyboxUp = ""
+            oldSky.SunVisible = false
+            oldSky.MoonVisible = false
+            oldSky.StarCount = 0
+        end)
+    end
+
+    saved.atmoProps = nil
+    local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
+    if atmo then
+        saved.atmoProps = {
+            Density = atmo.Density,
+            Haze = atmo.Haze,
+            Glare = atmo.Glare,
+        }
+        atmo.Density = 0
+        atmo.Haze = 0
+        atmo.Glare = 0
+    end
 
     --[[ lighting ]]--
     Lighting.Brightness           = 0
@@ -148,6 +193,41 @@ local function main()
         return twn
     end
 
+    local function addTrail(p, col)
+        local a1 = Instance.new("Attachment")
+        a1.Position = Vector3.new(0, 0, 0.35)
+        a1.Parent = p
+        local a2 = Instance.new("Attachment")
+        a2.Position = Vector3.new(0, 0, -0.35)
+        a2.Parent = p
+        local tr = Instance.new("Trail")
+        tr.Attachment0   = a1
+        tr.Attachment1   = a2
+        tr.Lifetime      = 0.14
+        tr.MinLength     = 0
+        tr.FaceCamera    = true
+        tr.LightEmission = 1
+        tr.WidthScale = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+        tr.Color = ColorSequence.new(col, C_HOT)
+        tr.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.25),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        tr.Parent = p
+    end
+
+    --[[ space enclosure -- guaranteed void background ]]--
+    part({
+        Name     = "BH_Space",
+        Size     = Vector3.new(4000, 4000, 4000),
+        Color    = Color3.new(0, 0, 0),
+        Material = Enum.Material.SmoothPlastic,
+        CFrame   = CFrame.new(HOLE),
+    })
+
     --[[ the hole ]]--
     local core = part({
         Name     = "BH_Core",
@@ -161,7 +241,7 @@ local function main()
     local plight = Instance.new("PointLight")
     plight.Color      = C_HOT
     plight.Brightness = 1.5
-    plight.Range      = 160
+    plight.Range      = 60
     plight.Parent     = core
 
     local glow = part({
@@ -187,12 +267,26 @@ local function main()
         })
     end
 
+    -- lensed halo ring (vertical, Interstellar-style)
+    local LENS_N   = 40
+    local lensTilt = diskTilt * CFrame.Angles(math.rad(90), 0, 0)
+    local lensSegs = {}
+    for i = 1, LENS_N do
+        lensSegs[i] = part({
+            Name         = "BH_Lens",
+            Size         = Vector3.new(0.4, 0.4, 2.0),
+            Color        = C_HOT,
+            Transparency = 0.55,
+            CFrame       = CFrame.new(HOLE),
+        })
+    end
+
     -- accretion disk (inner rings spin faster - Keplerian)
     local diskTilt = CFrame.Angles(math.rad(22), 0, math.rad(-8))
     local rings = {
-        {r = 26, n = 30, speed = 1.50, color = C_HOT,    sx = 1.5, sy = 0.9, sz = 3.6, base = 0.15},
-        {r = 35, n = 34, speed = 0.95, color = C_EMBER,  sx = 1.3, sy = 0.8, sz = 4.4, base = 0.25},
-        {r = 46, n = 38, speed = 0.60, color = C_PLASMA, sx = 1.2, sy = 0.7, sz = 5.2, base = 0.35},
+        {r = 24, n = 40, speed = 1.60, color = C_HOT,    sx = 1.5, sy = 0.9, sz = 3.0, base = 0.10},
+        {r = 33, n = 42, speed = 0.95, color = C_EMBER,  sx = 1.3, sy = 0.8, sz = 3.8, base = 0.20},
+        {r = 44, n = 46, speed = 0.60, color = C_PLASMA, sx = 1.2, sy = 0.7, sz = 4.6, base = 0.30},
     }
     local diskSegs = {}
     for ri, ring in ipairs(rings) do
@@ -230,6 +324,7 @@ local function main()
             h    = (math.random() - 0.5) * 60,
             spd  = 0.4 + math.random() * 0.5,
         }
+        addTrail(d, C_ICE)
     end
 
     -- starfield
@@ -247,6 +342,15 @@ local function main()
         stars[i] = {
             part = s, home = pos, size = s.Size, color = s.Color,
             sucked = false, p = 0, r0 = 0, a0 = 0, h0 = 0,
+        }
+    end
+
+    -- twinkling stars subset
+    local twinkle = {}
+    for i = 1, 50 do
+        twinkle[i] = {
+            part  = stars[math.random(#stars)].part,
+            phase = math.random() * math.pi * 2,
         }
     end
 
@@ -315,6 +419,22 @@ local function main()
             photonSegs[i].CFrame = CFrame.new(HOLE) * photonTilt
                 * CFrame.Angles(0, a, 0)
                 * CFrame.new(21, 0, 0)
+        end
+    end
+
+    local function updateLens(t)
+        for i = 1, LENS_N do
+            local a = (i / LENS_N) * math.pi * 2 - t * 0.10
+            lensSegs[i].Transparency = 0.50 + 0.12 * math.sin(t * 2 + i * 1.3)
+            lensSegs[i].CFrame = CFrame.new(HOLE) * lensTilt
+                * CFrame.Angles(0, a, 0)
+                * CFrame.new(25, 0, 0)
+        end
+    end
+
+    local function updateTwinkle(t)
+        for _, tk in ipairs(twinkle) do
+            tk.part.Transparency = 0.12 + 0.3 * (0.5 + 0.5 * math.sin(t * 2.5 + tk.phase))
         end
     end
 
@@ -468,15 +588,7 @@ local function main()
         return f
     end
 
-    -- letterbox
-    local topBar = newFrame(6, 0)
-    topBar.Size = UDim2.new(1, 0, 0, 0)
-    local botBar = newFrame(6, 0)
-    botBar.AnchorPoint = Vector2.new(0, 1)
-    botBar.Position    = UDim2.new(0, 0, 1, 0)
-    botBar.Size        = UDim2.new(1, 0, 0, 0)
-
-    -- vignette
+    -- vignette (full-screen cinematic frame, no bars)
     local function vignette(rot, pos, size)
         local f = newFrame(4, 0.35)
         f.Position = pos
@@ -626,6 +738,33 @@ local function main()
             end
         end)
         pcall(function()
+            if saved.skyProps then
+                local s = saved.skyProps
+                local o = s.obj
+                if o and o.Parent then
+                    o.SkyboxBk = s.Bk
+                    o.SkyboxDn = s.Dn
+                    o.SkyboxFt = s.Ft
+                    o.SkyboxLf = s.Lf
+                    o.SkyboxRt = s.Rt
+                    o.SkyboxUp = s.Up
+                    o.SunVisible = s.SunVisible
+                    o.MoonVisible = s.MoonVisible
+                    o.StarCount = s.StarCount
+                end
+            end
+        end)
+        pcall(function()
+            if saved.atmoProps then
+                local a = Lighting:FindFirstChildOfClass("Atmosphere")
+                if a then
+                    a.Density = saved.atmoProps.Density
+                    a.Haze = saved.atmoProps.Haze
+                    a.Glare = saved.atmoProps.Glare
+                end
+            end
+        end)
+        pcall(function()
             for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom"}) do
                 local o = Lighting:FindFirstChild(n)
                 if o then
@@ -650,6 +789,11 @@ local function main()
     skip.MouseButton1Click:Connect(function()
         click:Play()
         task.delay(0.08, cleanup)
+    end)
+
+    pcall(function()
+        local genv = (typeof(getgenv) == "function" and getgenv()) or _G
+        genv.LEGENDS_INTRO_STOP = cleanup
     end)
 
     --[[ camera director ]]--
@@ -753,13 +897,10 @@ local function main()
     local elapsed   = 0
     local shockIdx  = 1
 
-    tw(topBar, {Size = UDim2.new(1, 0, 0, 110)}, 1.8, Enum.EasingStyle.Quint)
-    tw(botBar, {Size = UDim2.new(1, 0, 0, 110)}, 1.8, Enum.EasingStyle.Quint)
     drone:Play()
     drone2:Play()
 
-    loopConn = RunService.RenderStepped:Connect(function(dtStep)
-        if dead then return end
+    local function stepFrame(dtStep)
         local dt = math.clamp(dtStep, 0.001, 0.1)
         elapsed  = elapsed + dtStep
         local t  = elapsed
@@ -778,10 +919,12 @@ local function main()
         end
 
         updatePhoton(t)
+        updateLens(t)
         updateDisk(t)
         updateDebris(dt)
         updateSucked(dt)
         updateShocks(dt)
+        updateTwinkle(t)
 
         shockPulse = shockPulse * (1 - dt * 2.2)
         glowPulse  = glowPulse * (1 - dt * 3)
@@ -792,23 +935,36 @@ local function main()
         cc.Contrast    = 0.08 + dive * 0.22
         cc.Saturation  = -0.05 - dive * 0.25
         cc.TintColor   = Color3.new(1, 1, 1):Lerp(Color3.fromRGB(150, 165, 220), dive)
-        bloom.Intensity = math.min(1.0 + 0.35 * math.sin(t * 1.3) + shockPulse * 0.7 + glowPulse * 0.3, 2.2)
+        bloom.Intensity = math.min(1.15 + 0.35 * math.sin(t * 1.3) + shockPulse * 0.7 + glowPulse * 0.3, 2.2)
 
         glow.Size         = Vector3.new(1, 1, 1) * (40 + glowPulse * 6)
         glow.Transparency = 0.95 - glowPulse * 0.05
         plight.Brightness = 1.5 + glowPulse * 1.2
 
-        local pos, fov, roll, shakeAmt = camAt(t)
-        local sx = math.noise(t * 1.7, 0) * shakeAmt
-        local sy = math.noise(0, t * 1.7) * shakeAmt
-        local sz = math.noise(t * 1.3, 9) * shakeAmt
-        pos = pos + Vector3.new(sx, sy, sz) * 1.1
-        local rShake = math.noise(t * 1.1, 4) * shakeAmt * 1.3
-        cam.CFrame = CFrame.lookAt(pos, HOLE + Vector3.new(0, 2, 0))
-            * CFrame.Angles(0, 0, math.rad(roll + rShake))
-        cam.FieldOfView = fov
+        local camNow = workspace.CurrentCamera
+        if camNow then
+            if camNow.CameraType ~= Enum.CameraType.Scriptable then
+                camNow.CameraType = Enum.CameraType.Scriptable
+            end
+            local pos, fov, roll, shakeAmt = camAt(t)
+            local sx = math.noise(t * 1.7, 0) * shakeAmt
+            local sy = math.noise(0, t * 1.7) * shakeAmt
+            local sz = math.noise(t * 1.3, 9) * shakeAmt
+            pos = pos + Vector3.new(sx, sy, sz) * 1.1
+            local rShake = math.noise(t * 1.1, 4) * shakeAmt * 1.3
+            camNow.CFrame = CFrame.lookAt(pos, HOLE + Vector3.new(0, 2, 0))
+                * CFrame.Angles(0, 0, math.rad(roll + rShake))
+            camNow.FieldOfView = fov
+        end
+    end
 
-        if t >= 60 then
+    loopConn = RunService.RenderStepped:Connect(function(dtStep)
+        if dead then return end
+        local ok, err = pcall(stepFrame, dtStep)
+        if not ok then
+            warn("[LEGENDS] frame error:", err)
+        end
+        if elapsed >= CONFIG.DURATION + 2 then
             cleanup()
         end
     end)
