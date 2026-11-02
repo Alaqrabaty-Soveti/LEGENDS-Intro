@@ -21,9 +21,9 @@ local CONFIG = {
     SUCK_EVERY   = 2.8,
 }
 
-local C_HOT    = Color3.fromRGB(255, 240, 214)
-local C_EMBER  = Color3.fromRGB(255, 160, 82)
-local C_PLASMA = Color3.fromRGB(196, 84, 130)
+local C_HOT    = Color3.fromRGB(255, 244, 224)
+local C_EMBER  = Color3.fromRGB(255, 184, 96)
+local C_PLASMA = Color3.fromRGB(198, 94, 42)
 local C_STAR   = Color3.fromRGB(214, 226, 255)
 local C_ICE    = Color3.fromRGB(170, 190, 255)
 
@@ -234,20 +234,20 @@ local function main()
 
     --[[ lighting ]]--
     Lighting.Brightness           = 0
-    Lighting.Ambient              = Color3.fromRGB(8, 8, 16)
-    Lighting.OutdoorAmbient       = Color3.fromRGB(14, 14, 26)
+    Lighting.Ambient              = Color3.fromRGB(3, 3, 7)
+    Lighting.OutdoorAmbient       = Color3.fromRGB(5, 5, 10)
     Lighting.ClockTime            = 0
-    Lighting.FogColor             = Color3.fromRGB(6, 6, 14)
-    Lighting.FogStart             = 250
-    Lighting.FogEnd               = 4000
+    Lighting.FogColor             = Color3.fromRGB(4, 4, 10)
+    Lighting.FogStart             = 300
+    Lighting.FogEnd               = 2800
     Lighting.GlobalShadows        = false
     Lighting.ExposureCompensation = 0.05
 
     local cc = Instance.new("ColorCorrectionEffect")
     cc.Name       = "LEGENDS_CC"
-    cc.Brightness = 0
-    cc.Contrast   = 0.08
-    cc.Saturation = -0.05
+    cc.Brightness = -0.03
+    cc.Contrast   = 0.14
+    cc.Saturation = -0.08
     cc.Parent     = Lighting
 
     local blur = Instance.new("BlurEffect")
@@ -257,9 +257,9 @@ local function main()
 
     local bloom = Instance.new("BloomEffect")
     bloom.Name      = "LEGENDS_Bloom"
-    bloom.Intensity = 1.0
-    bloom.Size      = 40
-    bloom.Threshold = 1.35
+    bloom.Intensity = 1.3
+    bloom.Size      = 32
+    bloom.Threshold = 0.95
     bloom.Parent    = Lighting
 
     --[[ helpers ]]--
@@ -364,50 +364,60 @@ local function main()
     -- disk tilt (v3.1 fix: declared BEFORE every structure that uses it)
     local diskTilt = CFrame.Angles(math.rad(22), 0, math.rad(-8))
 
-    -- photon ring
-    local PHOTON_N   = 36
-    local photonTilt = CFrame.Angles(math.rad(18), 0, math.rad(10))
+    -- photon ring: crisp white-hot ring hugging the shadow
+    local PHOTON_N   = isTouch and 18 or 26
+    local photonTilt = CFrame.Angles(math.rad(16), 0, math.rad(9))
     local photonSegs = {}
-    for i = 1, PHOTON_N do
-        photonSegs[i] = part({
-            Name         = "BH_Photon",
-            Size         = Vector3.new(0.5, 0.5, 2.4),
-            Color        = C_HOT,
-            Transparency = 0.12,
-            CFrame       = CFrame.new(HOLE),
-        })
+    do
+        local spacing = (2 * math.pi * 15) / PHOTON_N
+        for i = 1, PHOTON_N do
+            photonSegs[i] = part({
+                Name         = "BH_Photon",
+                Size         = Vector3.new(0.5, 0.28, spacing * 1.5),
+                Color        = C_HOT,
+                Transparency = 0.02,
+                CFrame       = CFrame.new(HOLE),
+            })
+        end
     end
 
-    -- lensed halo ring (vertical, Interstellar-style)
-    local LENS_N   = 40
+    -- lensed halo ring (vertical, Interstellar-style over/under the shadow)
+    local LENS_N   = isTouch and 20 or 30
     local lensTilt = diskTilt * CFrame.Angles(math.rad(90), 0, 0)
     local lensSegs = {}
-    for i = 1, LENS_N do
-        lensSegs[i] = part({
-            Name         = "BH_Lens",
-            Size         = Vector3.new(0.4, 0.4, 2.0),
-            Color        = C_HOT,
-            Transparency = 0.55,
-            CFrame       = CFrame.new(HOLE),
-        })
+    do
+        local spacing = (2 * math.pi * 18.5) / LENS_N
+        for i = 1, LENS_N do
+            lensSegs[i] = part({
+                Name         = "BH_Lens",
+                Size         = Vector3.new(0.4, 0.26, spacing * 1.5),
+                Color        = C_HOT,
+                Transparency = 0.42,
+                CFrame       = CFrame.new(HOLE),
+            })
+        end
     end
 
-    -- accretion disk (5 rings, inner spin faster - Keplerian)
+    -- accretion disk: overlapping bands that fuse into ONE solid glowing disk
+    -- (segment length > arc spacing => continuous ring, never dotted)
     local rings = {
-        {r = 22.5, n = 44, speed = 1.90, color = C_HOT,    sx = 1.4, sy = 0.7, sz = 2.6, base = 0.05},
-        {r = 26, n = 46, speed = 1.45, color = C_HOT,    sx = 1.5, sy = 0.9, sz = 3.0, base = 0.10},
-        {r = 33, n = 48, speed = 1.00, color = C_EMBER,  sx = 1.3, sy = 0.8, sz = 3.8, base = 0.20},
-        {r = 42, n = 52, speed = 0.65, color = C_PLASMA, sx = 1.2, sy = 0.7, sz = 4.6, base = 0.30},
-        {r = 53, n = 56, speed = 0.42, color = C_PLASMA, sx = 1.1, sy = 0.6, sz = 5.2, base = 0.42},
+        {r = 14,   speed = 1.60, color = C_HOT,    sx = 4.0, sy = 0.35, base = 0.05},
+        {r = 18.5, speed = 1.25, color = C_HOT,    sx = 4.5, sy = 0.50, base = 0.10},
+        {r = 24,   speed = 0.95, color = C_EMBER,  sx = 5.5, sy = 0.60, base = 0.16},
+        {r = 30.5, speed = 0.70, color = C_EMBER,  sx = 6.5, sy = 0.70, base = 0.24},
+        {r = 38.5, speed = 0.50, color = C_PLASMA, sx = 7.5, sy = 0.80, base = 0.34},
+        {r = 47,   speed = 0.34, color = C_PLASMA, sx = 9.0, sy = 0.90, base = 0.46},
     }
     local diskSegs = {}
-    local diskScale = isTouch and 0.55 or 1
+    local bandGap = isTouch and 9.5 or 7
     for ri, ring in ipairs(rings) do
-        local n = math.max(14, math.floor(ring.n * diskScale + 0.5))
+        local n       = math.max(10, math.ceil((2 * math.pi * ring.r) / bandGap))
+        local spacing = (2 * math.pi * ring.r) / n
         for i = 1, n do
+            local sz = spacing * (1.15 + math.random() * 0.35)
             local seg = part({
                 Name         = "BH_Disk",
-                Size         = Vector3.new(ring.sx, ring.sy, ring.sz),
+                Size         = Vector3.new(ring.sx * (0.8 + math.random() * 0.4), ring.sy, sz),
                 Color        = ring.color,
                 Transparency = ring.base,
                 CFrame       = CFrame.new(HOLE),
@@ -481,7 +491,8 @@ local function main()
 
     -- starfield
     local stars = {}
-    for i = 1, CONFIG.STAR_COUNT do
+    local starN = isTouch and 120 or CONFIG.STAR_COUNT
+    for i = 1, starN do
         local dist = 260 + math.random() * 560
         local pos  = HOLE + randomUnit() * dist
         local s = part({
@@ -560,18 +571,18 @@ local function main()
     for _, sgn in ipairs({1, -1}) do
         local beam = part({
             Name         = "BH_Jet",
-            Size         = Vector3.new(4, 240, 4),
+            Size         = Vector3.new(2, 180, 2),
             Color        = C_ICE,
-            Transparency = 0.88,
-            CFrame       = CFrame.new(HOLE + Vector3.new(0, sgn * 130, 0)),
+            Transparency = 0.94,
+            CFrame       = CFrame.new(HOLE + Vector3.new(0, sgn * 95, 0)),
         })
         local tip = part({
             Name         = "BH_JetTip",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(14, 14, 14),
+            Size         = Vector3.new(9, 9, 9),
             Color        = C_ICE,
-            Transparency = 0.92,
-            CFrame       = CFrame.new(HOLE + Vector3.new(0, sgn * 250, 0)),
+            Transparency = 0.94,
+            CFrame       = CFrame.new(HOLE + Vector3.new(0, sgn * 185, 0)),
         })
         jets[#jets + 1] = { beam = beam, tip = tip, seed = math.random() * 10 }
     end
@@ -580,10 +591,10 @@ local function main()
     local shocks = {}
     local function spawnShock()
         local list = {}
-        for i = 1, 32 do
+        for i = 1, 44 do
             list[i] = part({
                 Name         = "BH_Shock",
-                Size         = Vector3.new(0.8, 0.8, 10),
+                Size         = Vector3.new(0.6, 0.6, 26),
                 Color        = C_HOT,
                 Transparency = 0.35,
                 CFrame       = CFrame.new(HOLE),
@@ -595,21 +606,21 @@ local function main()
     --[[ per-frame updates ]]--
     local function updatePhoton(t)
         for i = 1, PHOTON_N do
-            local a = (i / PHOTON_N) * math.pi * 2 + t * 0.15
-            photonSegs[i].Transparency = 0.10 + 0.10 * math.sin(t * 3 + i * 0.9)
+            local a = (i / PHOTON_N) * math.pi * 2 + t * 0.22
+            photonSegs[i].Transparency = 0.02 + 0.08 * math.sin(t * 3 + i * 0.9)
             photonSegs[i].CFrame = CFrame.new(HOLE) * photonTilt
                 * CFrame.Angles(0, a, 0)
-                * CFrame.new(21, 0, 0)
+                * CFrame.new(15, 0, 0)
         end
     end
 
     local function updateLens(t)
         for i = 1, LENS_N do
-            local a = (i / LENS_N) * math.pi * 2 - t * 0.10
-            lensSegs[i].Transparency = 0.50 + 0.12 * math.sin(t * 2 + i * 1.3)
+            local a = (i / LENS_N) * math.pi * 2 - t * 0.14
+            lensSegs[i].Transparency = 0.40 + 0.14 * math.sin(t * 2 + i * 1.3)
             lensSegs[i].CFrame = CFrame.new(HOLE) * lensTilt
                 * CFrame.Angles(0, a, 0)
-                * CFrame.new(25, 0, 0)
+                * CFrame.new(18.5, 0, 0)
         end
     end
 
@@ -622,9 +633,9 @@ local function main()
     local function updateDisk(t)
         for _, s in ipairs(diskSegs) do
             local ring = rings[s.ring]
-            local a  = (s.i / s.n) * math.pi * 2 + t * ring.speed + s.jitter * 0.05
-            local rr = ring.r + 0.8 * math.sin(t * 2 + s.jitter)
-            s.part.Transparency = math.clamp(ring.base + 0.12 * math.sin(t * 3 + s.jitter), 0, 1)
+            local a  = (s.i / s.n) * math.pi * 2 + t * ring.speed + s.jitter * 0.01
+            local rr = ring.r + 0.5 * math.sin(t * 1.7 + s.jitter)
+            s.part.Transparency = math.clamp(ring.base + 0.10 * math.sin(t * 3 + s.jitter), 0, 1)
             s.part.CFrame = CFrame.new(HOLE) * diskTilt
                 * CFrame.Angles(0, a, 0)
                 * CFrame.new(rr, 0, 0)
@@ -733,11 +744,11 @@ local function main()
     end
 
     local function updateJets(t, dive)
-        local vis = 1 - math.clamp((dive - 0.3) / 0.35, 0, 1)
+        local vis = (1 - math.clamp((dive - 0.3) / 0.35, 0, 1)) * 0.55
         for _, j in ipairs(jets) do
             local f = 0.5 + 0.5 * math.sin(t * 2.1 + j.seed)
-            j.beam.Transparency = 1 - vis * (0.14 + f * 0.10)
-            j.tip.Transparency  = 1 - vis * (0.08 + f * 0.04)
+            j.beam.Transparency = 1 - vis * (0.08 + f * 0.04)
+            j.tip.Transparency  = 1 - vis * (0.06 + f * 0.03)
         end
     end
 
