@@ -14,7 +14,7 @@ local Debris       = game:GetService("Debris")
 
 local CONFIG = {
     DURATION     = 58,
-    HOLE_POS     = Vector3.new(0, 3000, 0),
+    HOLE_POS     = Vector3.new(0, 5000, 0), -- far above the map: beyond streaming range, nothing of the world exists near here
     STAR_COUNT   = 170,
     DEBRIS_COUNT = 44,
     SHOCK_TIMES  = {13, 20, 27, 34, 41, 47},
@@ -130,9 +130,21 @@ local function main()
             Haze = atmo.Haze,
             Glare = atmo.Glare,
         }
-        atmo.Density = 0
-        atmo.Haze = 0
-        atmo.Glare = 0
+        pcall(function()
+            atmo.Density = 0
+            atmo.Haze = 0
+            atmo.Glare = 0
+        end)
+    end
+
+    -- neutralize host-game post-processing (REV-B: a game ColorCorrection with
+    -- Brightness > 0 or a wide Bloom would gray-wash the black void walls)
+    saved.fxProps = {}
+    for _, fx in ipairs(Lighting:GetChildren()) do
+        if fx:IsA("PostEffect") and fx.Name:sub(1, 8) ~= "LEGENDS_" then
+            saved.fxProps[#saved.fxProps + 1] = { obj = fx, enabled = fx.Enabled }
+            fx.Enabled = false
+        end
     end
 
     --[[ emergency restore -- registered BEFORE the first mutation (v3.1) ]]--
@@ -187,6 +199,13 @@ local function main()
                     a.Density = saved.atmoProps.Density
                     a.Haze    = saved.atmoProps.Haze
                     a.Glare   = saved.atmoProps.Glare
+                end
+            end
+        end)
+        pcall(function()
+            for _, f in ipairs(saved.fxProps or {}) do
+                if f.obj then
+                    f.obj.Enabled = f.enabled
                 end
             end
         end)
@@ -328,14 +347,29 @@ local function main()
         tr.Parent = p
     end
 
-    --[[ space enclosure -- guaranteed void background ]]--
-    part({
-        Name     = "BH_Space",
-        Size     = Vector3.new(2048, 2048, 2048), -- Roblox per-axis cap; camera max dist ~570 stays inside
-        Color    = Color3.new(0, 0, 0),
-        Material = Enum.Material.SmoothPlastic,
-        CFrame   = CFrame.new(HOLE),
-    })
+    --[[ space enclosure -- 6 REAL walls forming a hollow black box.
+         v3.2 fix: a single solid Part is INVISIBLE from inside (Roblox backface
+         culling), so the game's gray sky + map leaked through it. Each wall's
+         inner face now faces the camera -> guaranteed pitch-black void. ]]--
+    local WALL_T, WALL_D = 8, 1024 -- inner faces at 1020; camera max reach ~570 never touches them
+    local wallDefs = {
+        {size = Vector3.new(2048, WALL_T, 2048), off = Vector3.new(0,  WALL_D, 0)}, -- ceiling
+        {size = Vector3.new(2048, WALL_T, 2048), off = Vector3.new(0, -WALL_D, 0)}, -- floor
+        {size = Vector3.new(WALL_T, 2048, 2048), off = Vector3.new( WALL_D, 0, 0)}, -- +X
+        {size = Vector3.new(WALL_T, 2048, 2048), off = Vector3.new(-WALL_D, 0, 0)}, -- -X
+        {size = Vector3.new(2048, 2048, WALL_T), off = Vector3.new(0, 0,  WALL_D)}, -- +Z
+        {size = Vector3.new(2048, 2048, WALL_T), off = Vector3.new(0, 0, -WALL_D)}, -- -Z
+    }
+    for wi, wd in ipairs(wallDefs) do
+        part({
+            Name        = "BH_Space_Wall" .. wi,
+            Size        = wd.size,
+            Color       = Color3.new(0, 0, 0),
+            Material    = Enum.Material.SmoothPlastic,
+            Reflectance = 0,
+            CFrame      = CFrame.new(HOLE + wd.off),
+        })
+    end
 
     --[[ the hole ]]--
     local core = part({
@@ -1019,6 +1053,13 @@ local function main()
             end
         end)
         pcall(function()
+            for _, f in ipairs(saved.fxProps or {}) do
+                if f.obj then
+                    f.obj.Enabled = f.enabled
+                end
+            end
+        end)
+        pcall(function()
             cc:Destroy()
             blur:Destroy()
             bloom:Destroy()
@@ -1174,6 +1215,19 @@ local function main()
         local dt = math.clamp(dtStep, 0.001, 0.1)
         elapsed  = elapsed + math.clamp(dtStep, 0, 0.25)
         local t  = elapsed
+
+        -- keep the void hers (REV-C): host day/night scripts may rewrite fog every frame
+        Lighting.FogColor = Color3.new(0, 0, 0)
+        Lighting.FogStart = 300
+        Lighting.FogEnd   = 2800
+        pcall(function()
+            local at2 = Lighting:FindFirstChildOfClass("Atmosphere")
+            if at2 then
+                at2.Density = 0
+                at2.Haze = 0
+                at2.Glare = 0
+            end
+        end)
 
         while shockIdx <= #CONFIG.SHOCK_TIMES and t >= CONFIG.SHOCK_TIMES[shockIdx] do
             shockIdx = shockIdx + 1
