@@ -1,5 +1,5 @@
 --=====================================================================
---  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3.3 (violet swirl edition)
+--  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3.5 (realistic Gargantua edition)
 --  Pure VFX: no character, no fight -- a living black hole.
 --  Loader:
 --  loadstring(game:HttpGet("https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/LEGENDS_Intro_VFX_Studio_v2.lua"))()
@@ -15,20 +15,20 @@ local Debris       = game:GetService("Debris")
 local CONFIG = {
     DURATION     = 58,
     HOLE_POS     = Vector3.new(0, 5000, 0), -- far above the map: beyond streaming range, nothing of the world exists near here
-    STAR_COUNT   = 220,
+    STAR_COUNT   = 380,
     DEBRIS_COUNT = 44,
     SHOCK_TIMES  = {13, 20, 27, 34, 41, 47},
     SUCK_EVERY   = 2.8,
 }
 
--- v3.3 palette: the syuaey look -- blazing white core -> pink -> magenta -> violet -> deep purple
-local C_CORE   = Color3.fromRGB(255, 250, 255) -- blazing white (inner edge / column flare)
-local C_HOT    = Color3.fromRGB(255, 214, 252) -- pink-white
-local C_EMBER  = Color3.fromRGB(255, 92, 255)  -- hot magenta
-local C_PLASMA = Color3.fromRGB(188, 70, 255)  -- violet
-local C_ROSE   = Color3.fromRGB(104, 44, 214)  -- deep purple outer fade
-local C_STAR   = Color3.fromRGB(224, 214, 255)
-local C_ICE    = Color3.fromRGB(146, 166, 255) -- blue-violet (comets / debris)
+-- v3.5 palette: real Gargantua look -- white-hot core -> gold -> orange -> burnt outer edge
+local C_CORE   = Color3.fromRGB(255, 252, 240) -- blazing white-hot (inner edge)
+local C_HOT    = Color3.fromRGB(255, 236, 186) -- pale gold
+local C_EMBER  = Color3.fromRGB(255, 192, 104) -- gold-orange
+local C_PLASMA = Color3.fromRGB(255, 142, 56)  -- deep orange
+local C_ROSE   = Color3.fromRGB(198, 84, 30)   -- burnt red-orange outer fade
+local C_STAR   = Color3.fromRGB(255, 244, 224) -- warm star white
+local C_ICE    = Color3.fromRGB(168, 198, 255) -- cold blue (comets / ice giant only)
 
 local function destroyPrevious()
     local roots = {workspace, Lighting}
@@ -386,7 +386,7 @@ local function main()
     local core = part({
         Name     = "BH_Core",
         Shape    = Enum.PartType.Ball,
-        Size     = Vector3.new(26, 26, 26),
+        Size     = Vector3.new(44, 44, 44), -- v3.5: a BIGGER shadow
         Color    = Color3.new(0, 0, 0),
         Material = Enum.Material.SmoothPlastic,
         CFrame   = CFrame.new(HOLE),
@@ -394,134 +394,149 @@ local function main()
 
     local plight = Instance.new("PointLight")
     plight.Color      = C_HOT
-    plight.Brightness = 1.5
-    plight.Range      = 60
+    plight.Brightness = 2.0
+    plight.Range      = 90
     plight.Parent     = core
 
     local glow = part({
         Name         = "BH_Glow",
         Shape        = Enum.PartType.Ball,
-        Size         = Vector3.new(40, 40, 40),
+        Size         = Vector3.new(58, 58, 58),
         Color        = C_HOT,
-        Transparency = 0.95,
+        Transparency = 0.93,
         CFrame       = CFrame.new(HOLE),
     })
 
     -- disk tilt (v3.1 fix: declared BEFORE every structure that uses it)
-    local diskTilt = CFrame.Angles(math.rad(22), 0, math.rad(-8))
+    local diskTilt = CFrame.Angles(math.rad(14), 0, math.rad(-6))
 
-    -- photon ring: crisp white-hot ring hugging the shadow
-    local PHOTON_N   = isTouch and 18 or 26
-    local photonTilt = CFrame.Angles(math.rad(16), 0, math.rad(-8))
-    local photonSegs = {}
-    do
-        local spacing = (2 * math.pi * 15) / PHOTON_N
-        for i = 1, PHOTON_N do
-            photonSegs[i] = part({
-                Name         = "BH_Photon",
-                Size         = Vector3.new(0.45, 0.22, spacing * 1.5),
-                Color        = C_CORE,
-                Transparency = 0.0,
-                CFrame       = CFrame.new(HOLE),
-            })
-        end
-    end
+    --[[ ======  REALISTIC HOLE (v3.5): smooth primitives ONLY -- zero boxes.
+         Trick: solid Neon cylinders + the opaque black core. The core swallows
+         every cylinder's center, so a solid disk reads as a glowing RING. ]]--
+    local diskBase0 = CFrame.new(HOLE) * diskTilt
 
-    -- lensed halo ring (vertical, Interstellar-style over/under the shadow)
-    local LENS_N   = isTouch and 20 or 30
-    local lensTilt = diskTilt * CFrame.Angles(math.rad(90), 0, 0)
-    local lensSegs = {}
-    do
-        local spacing = (2 * math.pi * 18.5) / LENS_N
-        for i = 1, LENS_N do
-            lensSegs[i] = part({
-                Name         = "BH_Lens",
-                Size         = Vector3.new(0.4, 0.26, spacing * 1.5),
-                Color        = C_HOT,
-                Transparency = 0.42,
-                CFrame       = CFrame.new(HOLE),
-            })
-        end
-    end
+    -- photon ring: razor-thin white-hot ring hugging the shadow
+    local photonC = part({
+        Name         = "BH_PhotonRing",
+        Shape        = Enum.PartType.Cylinder,
+        Size         = Vector3.new(0.5, 52, 52), -- radius 26 around the r=22 core
+        Color        = C_CORE,
+        Transparency = 0.02,
+        CFrame       = CFrame.new(HOLE) * CFrame.Angles(0, 0, math.rad(90)), -- axis up -> flat ring
+    })
 
-    -- accretion disk: overlapping bands that fuse into ONE solid glowing disk
-    -- (segment length > arc spacing => continuous ring, never dotted)
-    local rings = {
-        {r = 13.5, speed = 1.65, color = C_CORE,   sx = 3.6, sy = 0.30, base = 0.03},
-        {r = 17.5, speed = 1.30, color = C_HOT,    sx = 4.4, sy = 0.48, base = 0.08},
-        {r = 23,   speed = 0.98, color = C_EMBER,  sx = 5.5, sy = 0.60, base = 0.15},
-        {r = 29.5, speed = 0.72, color = C_EMBER,  sx = 6.5, sy = 0.70, base = 0.22},
-        {r = 37.5, speed = 0.52, color = C_PLASMA, sx = 7.5, sy = 0.82, base = 0.32},
-        {r = 46,   speed = 0.36, color = C_PLASMA, sx = 8.5, sy = 0.95, base = 0.44},
-        {r = 56,   speed = 0.22, color = C_ROSE,   sx = 10,  sy = 1.15, base = 0.62},
+    -- lensed halo: vertical ring arcing over/under the shadow (Interstellar signature)
+    local haloT = part({
+        Name         = "BH_LensHalo",
+        Shape        = Enum.PartType.Cylinder,
+        Size         = Vector3.new(0.7, 60, 60),
+        Color        = C_HOT,
+        Transparency = 0.24,
+        CFrame       = CFrame.new(HOLE) * diskTilt
+            * CFrame.Angles(math.rad(90), 0, 0)
+            * CFrame.Angles(0, 0, math.rad(90)),
+    })
+
+    -- smooth accretion disk: stacked flat cylinders, white-hot inner edge -> burnt rim
+    local DISK_CYLS = {
+        {r = 32,  h = 0.7, c = C_CORE,   tr = 0.05},
+        {r = 40,  h = 0.9, c = C_HOT,    tr = 0.10},
+        {r = 49,  h = 1.1, c = C_EMBER,  tr = 0.16},
+        {r = 59,  h = 1.3, c = C_EMBER,  tr = 0.24},
+        {r = 70,  h = 1.6, c = C_PLASMA, tr = 0.60}, -- outer layers kept faint so the
+        {r = 83,  h = 1.9, c = C_PLASMA, tr = 0.68}, -- white-hot inner edge reads
+        {r = 97,  h = 2.2, c = C_ROSE,   tr = 0.76}, -- through the stack (REV-B)
+        {r = 112, h = 2.6, c = C_ROSE,   tr = 0.83},
     }
-    local diskSegs = {}
-    local bandGap = isTouch and 13 or 7
-    for ri, ring in ipairs(rings) do
-        local n       = math.max(10, math.ceil((2 * math.pi * ring.r) / bandGap))
-        local spacing = (2 * math.pi * ring.r) / n
-        for i = 1, n do
-            local sz = spacing * (1.15 + math.random() * 0.35)
-            local seg = part({
-                Name         = "BH_Disk",
-                Size         = Vector3.new(ring.sx * (0.8 + math.random() * 0.4), ring.sy, sz),
-                Color        = ring.color,
-                Transparency = ring.base,
-                CFrame       = CFrame.new(HOLE),
-            })
-            diskSegs[#diskSegs + 1] = {
-                part   = seg,
-                ring   = ri,
-                i      = i,
-                n      = n,
-                jitter = math.random() * math.pi * 2,
-            }
-        end
+    for _, dc in ipairs(DISK_CYLS) do
+        part({
+            Name         = "BH_Disk",
+            Shape        = Enum.PartType.Cylinder,
+            Size         = Vector3.new(dc.h, dc.r * 2, dc.r * 2),
+            Color        = dc.c,
+            Transparency = dc.tr,
+            CFrame       = diskBase0 * CFrame.Angles(0, 0, math.rad(90)),
+        })
     end
 
-    -- spiral arms: bright swirl ribbons winding out of the disk (the video's signature look)
-    local spiralArms = {}
+    -- relativistic beaming: one side of the disk burns brighter (soft stretched glow)
+    local doppler = part({
+        Name         = "BH_Doppler",
+        Shape        = Enum.PartType.Ball,
+        Size         = Vector3.new(18, 9, 46),
+        Color        = C_HOT,
+        Transparency = 0.78,
+        CFrame       = diskBase0 * CFrame.Angles(0, 0.9, 0) * CFrame.new(52, 0, 0),
+    })
+
+    -- orbiting dust: rotating invisible anchors make particles spawn along sweeping
+    -- arcs (engine-side particles = silky motion, never boxy)
+    local function dustEmitter(parent, rate, s0, s1, life, c0, c1)
+        local pe = Instance.new("ParticleEmitter")
+        pe.Texture        = "rbxasset://textures/particles/sparkles_main.dds"
+        pe.Rate           = rate
+        pe.Speed          = NumberRange.new(0, 0.4)
+        pe.Lifetime       = NumberRange.new(life * 0.6, life)
+        pe.RotSpeed       = NumberRange.new(-40, 40)
+        pe.SpreadAngle    = Vector2.new(6, 6)
+        pe.LightEmission  = 1
+        pe.LightInfluence = 0
+        pe.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, s0),
+            NumberSequenceKeypoint.new(1, s1),
+        })
+        pe.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.25),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        pe.Color  = ColorSequence.new(c0, c1)
+        pe.Parent = parent
+        return pe
+    end
+
+    local dustIn = part({
+        Name         = "BH_DustIn",
+        Size         = Vector3.new(84, 1.4, 84),
+        Transparency = 1,
+        CFrame       = diskBase0,
+    })
+    dustEmitter(dustIn, isTouch and 50 or 100, 0.35, 1.1, 1.7, C_CORE, C_EMBER)
+
+    local dustOut = part({
+        Name         = "BH_DustOut",
+        Size         = Vector3.new(210, 2.6, 210),
+        Transparency = 1,
+        CFrame       = diskBase0,
+    })
+    dustEmitter(dustOut, isTouch and 24 or 48, 0.7, 2.1, 2.6, C_HOT, C_PLASMA)
+
+    -- faint stardust drifting through the void (depth parallax)
+    local voidDust = part({
+        Name         = "BH_VoidDust",
+        Size         = Vector3.new(1500, 320, 1500),
+        Transparency = 1,
+        CFrame       = CFrame.new(HOLE),
+    })
     do
-        local ARM_SEG = isTouch and 22 or 30
-        local DTH = math.rad(520) / (ARM_SEG - 1) -- angular step between arm segments
-        local DR  = 42 / (ARM_SEG - 1)            -- radial step  (REV-B: segments must be
-        for arm = 1, 3 do                          -- tangent-aligned + chord-long so arms read
-            local a0 = (arm / 3) * math.pi * 2     -- as continuous ribbons, never dashes)
-            for k = 0, ARM_SEG - 1 do
-                local u     = k / (ARM_SEG - 1)
-                local rr    = 15 + u * 42
-                local col   = C_HOT:Lerp(C_PLASMA, u):Lerp(C_ROSE, u * u * 0.85)
-                local base  = 0.10 + u * 0.30
-                local chord = math.sqrt(DR * DR + (rr * DTH) ^ 2) * 1.35
-                local yaw   = math.atan(DR / (rr * DTH))
-                spiralArms[#spiralArms + 1] = {
-                    part = part({
-                        Name         = "BH_Arm",
-                        Size         = Vector3.new(1.6 - u * 0.8, 0.7, chord),
-                        Color        = col,
-                        Transparency = base,
-                        CFrame       = CFrame.new(HOLE),
-                    }),
-                    u    = u,
-                    th0  = a0 + u * math.rad(520),
-                    rr   = rr,
-                    yaw  = yaw,
-                    base = base,
-                    jit  = math.random() * math.pi * 2,
-                }
-            end
-        end
+        local pe = dustEmitter(voidDust, 7, 6, 10, 14, Color3.fromRGB(210, 220, 240), C_ICE)
+        pe.LightEmission = 0.55
+        pe.Speed = NumberRange.new(0, 0.18)
+        pe.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.93),
+            NumberSequenceKeypoint.new(1, 1),
+        })
     end
 
-    -- infalling debris: glowing violet/blue chunks raining into the swirl
+    -- infalling debris: glowing meteors (round, with trails) raining into the disk
     local debris = {}
-    local debrisTints = { C_ICE, C_EMBER, C_PLASMA }
+    local debrisTints = { C_ICE, C_HOT, C_EMBER }
     local debrisN = isTouch and 26 or CONFIG.DEBRIS_COUNT
     for i = 1, debrisN do
         local tint = debrisTints[(i % #debrisTints) + 1]
         local d = part({
             Name   = "BH_Debris",
-            Size   = Vector3.new(1, 1, 1) * (1.7 + math.random() * 1.7),
+            Shape  = Enum.PartType.Ball,
+            Size   = Vector3.new(1, 1, 1) * (2 + math.random() * 2),
             Color  = tint,
             CFrame = CFrame.new(HOLE),
         })
@@ -529,7 +544,7 @@ local function main()
             part = d,
             tint = tint,
             tilt = CFrame.Angles((math.random() - 0.5) * 1.1, 0, (math.random() - 0.5) * 1.1),
-            r    = 60 + math.random() * 100,
+            r    = 70 + math.random() * 190,
             ang  = math.random() * math.pi * 2,
             h    = (math.random() - 0.5) * 150,
             spd  = 0.4 + math.random() * 0.5,
@@ -537,32 +552,34 @@ local function main()
         addTrail(d, tint)
     end
 
-    -- plasma knots: bright chunks riding the disk with trails
+    -- plasma knots: bright orbs riding the disk with trails
     local hotspots = {}
     for i = 1, 7 do
         local h = part({
             Name   = "BH_HotSpot",
-            Size   = Vector3.new(1, 1, 1) * (2 + math.random() * 1.5),
+            Shape  = Enum.PartType.Ball,
+            Size   = Vector3.new(1, 1, 1) * (3 + math.random() * 1.5),
             Color  = C_HOT,
             CFrame = CFrame.new(HOLE),
         })
         addTrail(h, C_EMBER)
         hotspots[i] = {
             part = h,
-            r    = 24 + math.random() * 26,
+            r    = 30 + math.random() * 40,
             ang  = math.random() * math.pi * 2,
             spd  = 0.9 + math.random() * 0.9,
             hgt  = (math.random() - 0.5) * 4,
         }
     end
 
-    -- flare arcs: random magnetic flares flashing on the rim
+    -- prominence sparks: tiny orbs flashing on the inner rim
     local flares = {}
     for i = 1, 14 do
         flares[i] = {
             part = part({
                 Name         = "BH_Flare",
-                Size         = Vector3.new(0.6, 0.6, 3.4),
+                Shape        = Enum.PartType.Ball,
+                Size         = Vector3.new(2.4, 2.4, 2.4),
                 Color        = C_HOT,
                 Transparency = 1,
                 CFrame       = CFrame.new(HOLE),
@@ -571,13 +588,13 @@ local function main()
             life = 0,
             max  = 0.5 + math.random() * 0.4,
             ang  = 0,
-            r    = 25 + math.random() * 8,
+            r    = 30 + math.random() * 12,
         }
     end
 
-    -- starfield
+    -- starfield (v3.5: DOUBLE the stars)
     local stars = {}
-    local starN = isTouch and 150 or CONFIG.STAR_COUNT
+    local starN = isTouch and 240 or CONFIG.STAR_COUNT
     local starPalette = {
         Color3.fromRGB(214, 226, 255), -- blue-white
         Color3.fromRGB(255, 244, 230), -- warm white
@@ -585,12 +602,12 @@ local function main()
         Color3.fromRGB(190, 235, 255), -- pale cyan
     }
     for i = 1, starN do
-        local giant = (i <= 8)
+        local giant = (i <= 10)
         local dist  = 260 + math.random() * 560
         local pos   = HOLE + randomUnit() * dist
         local s = part({
             Name         = "BH_Star",
-            Size         = Vector3.new(1, 1, 1) * (giant and (2.3 + math.random() * 0.9) or (0.7 + math.random() * 1.2)),
+            Size         = Vector3.new(1, 1, 1) * (giant and (2.6 + math.random() * 1.0) or (0.7 + math.random() * 1.2)),
             Color        = giant and Color3.fromRGB(255, 250, 240) or starPalette[math.random(#starPalette)],
             Transparency = giant and 0.02 or (0.05 + math.random() * 0.35),
             CFrame       = CFrame.new(pos),
@@ -601,17 +618,32 @@ local function main()
         }
     end
 
+    -- far star layer: a deep curtain of tiny static stars near the walls
+    do
+        local farN = isTouch and 90 or 160
+        for i = 1, farN do
+            local dist = 640 + math.random() * 330
+            part({
+                Name         = "BH_FarStar",
+                Size         = Vector3.new(1, 1, 1) * (0.5 + math.random() * 0.7),
+                Color        = starPalette[math.random(#starPalette)],
+                Transparency = 0.3 + math.random() * 0.35,
+                CFrame       = CFrame.new(HOLE + randomUnit() * dist),
+            })
+        end
+    end
+
     -- twinkling stars subset (unique stars, shuffled; giants 1..8 keep fixed brightness)
     local twinkle = {}
     local tidx = {}
-    for i = 9, #stars do
+    for i = 11, #stars do
         tidx[#tidx + 1] = i
     end
     for i = #tidx, 2, -1 do
         local j = math.random(i)
         tidx[i], tidx[j] = tidx[j], tidx[i]
     end
-    for i = 1, math.min(isTouch and 30 or 70, #tidx) do
+    for i = 1, math.min(isTouch and 45 or 110, #tidx) do
         twinkle[i] = {
             part  = stars[tidx[i]].part,
             star  = stars[tidx[i]],
@@ -619,14 +651,14 @@ local function main()
         }
     end
 
-    -- nebula blobs
+    -- nebula blobs: deep-space gas clouds (realistic photo palette)
     local nebColors = {
-        Color3.fromRGB(96, 48, 180),
-        Color3.fromRGB(58, 40, 168),
-        Color3.fromRGB(172, 44, 168),
-        Color3.fromRGB(48, 66, 190),
-        Color3.fromRGB(120, 36, 205),
-        Color3.fromRGB(70, 108, 225),
+        Color3.fromRGB(38, 60, 148),   -- deep space blue
+        Color3.fromRGB(26, 108, 138),  -- teal
+        Color3.fromRGB(52, 46, 128),   -- dim indigo
+        Color3.fromRGB(148, 78, 40),   -- warm dust
+        Color3.fromRGB(84, 108, 196),  -- pale blue
+        Color3.fromRGB(138, 40, 62),   -- crimson dust
     }
     for i = 1, 12 do
         local dir = randomUnit()
@@ -635,57 +667,105 @@ local function main()
             dir = Vector3.new(1, 0.2, 0)
         end
         dir = dir.Unit
-        local dist = 700 + math.random() * 80
+        local dist = 680 + math.random() * 140
         part({
             Name         = "BH_Nebula",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(1, 1, 1) * (90 + math.random() * 90),
+            Size         = Vector3.new(1, 1, 1) * (120 + math.random() * 120),
             Color        = nebColors[(i % #nebColors) + 1],
             Transparency = 0.955,
             CFrame       = CFrame.new(HOLE + dir * dist),
         })
     end
 
-    -- ringed gas planet far in the void (opposite side from the galaxy swirl)
+    --[[ planets: a small system scattered in the void -- v3.5: MORE + BIGGER,
+         all self-lit Neon (Lighting is pitch black out here, plastic would vanish) ]]--
+    local moonP, moonCenter, moonTilt
     do
-        local planetPos = HOLE + Vector3.new(-0.6, 0.22, 0.76).Unit * 720
+        -- P1: giant ringed world (Saturn-like, much bigger)
+        local p1Pos = HOLE + Vector3.new(-0.6, 0.22, 0.76).Unit * 760
         part({
-            Name         = "BH_Planet",
+            Name         = "BH_Planet1",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(64, 64, 64),
-            Color        = Color3.fromRGB(118, 94, 172),
-            Transparency = 0.05,
-            CFrame       = CFrame.new(planetPos),
+            Size         = Vector3.new(150, 150, 150),
+            Color        = Color3.fromRGB(214, 176, 128),
+            Transparency = 0.04,
+            CFrame       = CFrame.new(p1Pos),
         })
         local ringTilt = CFrame.Angles(math.rad(74), 0, math.rad(18))
-        for ri, pr in ipairs({ 96, 118 }) do
-            local nseg = isTouch and 16 or 26
-            local spacing = (2 * math.pi * pr) / nseg
-            for i = 1, nseg do
-                local a = (i / nseg) * math.pi * 2
-                part({
-                    Name         = "BH_PlanetRing",
-                    Size         = Vector3.new(3.2, 0.8, spacing * 1.3),
-                    Color        = Color3.fromRGB(196, 170, 238),
-                    Transparency = (ri == 1) and 0.66 or 0.78,
-                    CFrame       = CFrame.new(planetPos) * ringTilt
-                        * CFrame.Angles(0, a, 0)
-                        * CFrame.new(pr, 0, 0),
-                })
-            end
+        for ri, pr in ipairs({ 210, 262 }) do
+            part({
+                Name         = "BH_Planet1Ring",
+                Shape        = Enum.PartType.Cylinder,
+                Size         = Vector3.new(ri == 1 and 1.4 or 2.4, pr * 2, pr * 2),
+                Color        = Color3.fromRGB(226, 200, 160),
+                Transparency = (ri == 1) and 0.55 or 0.72,
+                CFrame       = CFrame.new(p1Pos) * CFrame.Angles(0, 0, math.rad(90)) * ringTilt,
+            })
         end
+
+        -- P2: ice giant (cold blue, far side)
+        local p2Pos = HOLE + Vector3.new(0.55, -0.18, 0.62).Unit * 830
+        part({
+            Name         = "BH_Planet2",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(110, 110, 110),
+            Color        = Color3.fromRGB(140, 182, 238),
+            Transparency = 0.05,
+            CFrame       = CFrame.new(p2Pos),
+        })
+
+        -- P3: red rock world + orbiting moon
+        local p3Pos = HOLE + Vector3.new(0.2, 0.35, -0.85).Unit * 700
+        part({
+            Name         = "BH_Planet3",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(84, 84, 84),
+            Color        = Color3.fromRGB(196, 112, 72),
+            Transparency = 0.05,
+            CFrame       = CFrame.new(p3Pos),
+        })
+        moonP = part({
+            Name         = "BH_Moon",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(22, 22, 22),
+            Color        = Color3.fromRGB(190, 190, 198),
+            Transparency = 0.1,
+            CFrame       = CFrame.new(p3Pos),
+        })
+        moonCenter = CFrame.new(p3Pos)
+        moonTilt   = CFrame.Angles(math.rad(24), 0, math.rad(10))
+
+        -- P4: molten world near the hole (glows with captured heat)
+        local p4Pos = HOLE + Vector3.new(-0.35, 0.4, -0.55).Unit * 430
+        part({
+            Name         = "BH_Planet4",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(48, 48, 48),
+            Color        = Color3.fromRGB(255, 138, 54),
+            Transparency = 0.1,
+            CFrame       = CFrame.new(p4Pos),
+        })
     end
 
-    -- distant galaxy swirl
+    -- distant galaxy swirl (v3.5: bigger + a soft core glow)
     local galaxyCF = CFrame.new(HOLE + Vector3.new(480, 190, -420))
         * CFrame.Angles(math.rad(60), 0, math.rad(20))
-    for i = 1, 46 do
+    part({
+        Name         = "BH_GalCore",
+        Shape        = Enum.PartType.Ball,
+        Size         = Vector3.new(70, 70, 70),
+        Color        = Color3.fromRGB(255, 238, 210),
+        Transparency = 0.86,
+        CFrame       = galaxyCF,
+    })
+    for i = 1, 70 do
         local a  = math.random() * math.pi * 2
-        local rr = 6 + math.random() * 55
-        local y  = (math.random() - 0.5) * 4
+        local rr = 6 + math.random() * 95
+        local y  = (math.random() - 0.5) * 16
         part({
             Name         = "BH_GalStar",
-            Size         = Vector3.new(1, 1, 1) * (0.6 + math.random() * 0.9),
+            Size         = Vector3.new(1, 1, 1) * (0.6 + math.random() * 1.1),
             Color        = C_ICE:Lerp(C_HOT, math.random()),
             Transparency = 0.1 + math.random() * 0.4,
             CFrame       = galaxyCF * CFrame.Angles(0, a, 0) * CFrame.new(rr, y, 0),
@@ -715,164 +795,33 @@ local function main()
         comets[i].trail.Enabled = false -- parked invisible: no stray streak
     end
 
-    -- THE ENERGY PILLAR (video signature): blazing column + helix coil + base flare
-    local column = {}
-    do
-        column.beamIn = part({
-            Name         = "BH_ColIn",
-            Size         = Vector3.new(4.6, 185, 4.6),
-            Color        = C_HOT,
-            Transparency = 0.10,
-            CFrame       = CFrame.new(HOLE + Vector3.new(0, 98, 0)),
-        })
-        column.beamOut = part({
-            Name         = "BH_ColOut",
-            Size         = Vector3.new(14, 190, 14),
-            Color        = C_EMBER,
-            Transparency = 0.86,
-            CFrame       = CFrame.new(HOLE + Vector3.new(0, 100, 0)),
-        })
-        column.tip = part({
-            Name         = "BH_ColTip",
-            Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(16, 16, 16),
-            Color        = C_EMBER,
-            Transparency = 0.72,
-            CFrame       = CFrame.new(HOLE + Vector3.new(0, 196, 0)),
-        })
-        column.flare = part({
-            Name         = "BH_ColFlare",
-            Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(30, 30, 30),
-            Color        = C_CORE,
-            Transparency = 0.08,
-            CFrame       = CFrame.new(HOLE + Vector3.new(0, 1, 0)),
-        })
-        column.petals = {}
-        for i = 1, 6 do
-            column.petals[i] = part({
-                Name         = "BH_ColPetal",
-                Size         = Vector3.new(7, 0.5, 13),
-                Color        = C_HOT,
-                Transparency = 0.30,
-                CFrame       = CFrame.new(HOLE) * CFrame.Angles(0, (i / 6) * math.pi * 2, 0)
-                    * CFrame.new(0, 1.5, 9),
-            })
-        end
-        column.helix = {}
-        local HN = isTouch and 20 or 28
-        for strand = 1, 2 do
-            for k = 0, HN - 1 do
-                column.helix[#column.helix + 1] = {
-                    part = part({
-                        Name         = "BH_Coil",
-                        Size         = Vector3.new(1.8, 1.8, (186 / HN) * 1.15),
-                        Color        = (strand == 1) and C_EMBER or C_HOT,
-                        Transparency = 0.22,
-                        CFrame       = CFrame.new(HOLE),
-                    }),
-                    strand = strand,
-                    k      = k,
-                    hn     = HN,
-                }
-            end
-        end
-    end
-
-    -- containment sphere: violet energy shell + bright tumbling cage rings
-    local sphereBall = part({
-        Name         = "BH_Shell",
-        Shape        = Enum.PartType.Ball,
-        Size         = Vector3.new(150, 150, 150),
-        Color        = C_PLASMA,
-        Transparency = 0.94,
-        CFrame       = CFrame.new(HOLE),
-    })
-    local cageRings = {}
-    do
-        local CR = 76
-        local CN = isTouch and 18 or 34
-        local cageDefs = {
-            CFrame.Angles(0, 0, math.rad(90)),            -- vertical ring
-            CFrame.Angles(0, 0, 0),                       -- horizontal ring
-            CFrame.Angles(math.rad(52), 0, math.rad(28)), -- tilted ring
-        }
-        for ci, axis in ipairs(cageDefs) do
-            local spacing = (2 * math.pi * CR) / CN
-            local segs = {}
-            for i = 1, CN do
-                segs[i] = part({
-                    Name         = "BH_Cage",
-                    Size         = Vector3.new(0.9, 0.5, spacing * 1.6),
-                    Color        = C_EMBER,
-                    Transparency = 0.40,
-                    CFrame       = CFrame.new(HOLE),
-                })
-            end
-            cageRings[ci] = { segs = segs, axis = axis, spd = 0.14 - ci * 0.035, CN = CN, CR = CR }
-        end
-    end
-
-    -- starburst spikes: thin rays radiating out of the core (video burst rays)
-    local spikes = {}
-    do
-        local SN = isTouch and 10 or 14
-        for i = 1, SN do
-            local len  = 46 + math.random() * 58
-            local elev = (math.random() - 0.5) * 1.0
-            spikes[i] = {
-                part = part({
-                    Name         = "BH_Spike",
-                    Size         = Vector3.new(0.5, 0.5, len),
-                    Color        = C_HOT,
-                    Transparency = 1,
-                    CFrame       = CFrame.new(HOLE),
-                }),
-                len   = len,
-                elev  = elev,
-                phase = math.random() * math.pi * 2,
-                spd   = 0.20 + math.random() * 0.25,
-            }
-        end
-    end
+    -- (v3.5) the fantasy props (energy pillar / cage / spikes) are gone --
+    -- a real black hole needs only shadow, ring, disk and falling matter.
 
     -- shockwaves
     local shocks = {}
     local function spawnShock()
-        local list = {}
-        for i = 1, 44 do
-            list[i] = part({
+        shocks[#shocks + 1] = {
+            ball = part({
                 Name         = "BH_Shock",
-                Size         = Vector3.new(0.6, 0.6, 26),
+                Shape        = Enum.PartType.Ball,
+                Size         = Vector3.new(1, 1, 1) * 30,
                 Color        = C_EMBER,
-                Transparency = 0.35,
+                Transparency = 0.2,
                 CFrame       = CFrame.new(HOLE),
-            })
-        end
-        shocks[#shocks + 1] = {segs = list, t = 0}
+            }),
+            t = 0,
+        }
     end
 
     --[[ per-frame updates ]]--
-    local photonBase = CFrame.new(HOLE) * photonTilt
-    local function updatePhoton(t)
-        for i = 1, PHOTON_N do
-            local a = (i / PHOTON_N) * math.pi * 2 + t * 0.22
-            photonSegs[i].Transparency = math.max(0, 0.06 * math.sin(t * 3 + i * 0.9))
-            photonSegs[i].CFrame = photonBase
-                * CFrame.Angles(0, a, 0)
-                * CFrame.new(15, 0, 0)
-        end
-    end
-
-    local lensBase = CFrame.new(HOLE) * lensTilt
-    local function updateLens(t)
-        for i = 1, LENS_N do
-            local a = (i / LENS_N) * math.pi * 2 - t * 0.14
-            lensSegs[i].Transparency = 0.34 + 0.12 * math.sin(t * 2 + i * 1.3)
-            lensSegs[i].CFrame = lensBase
-                * CFrame.Angles(0, a, 0)
-                * CFrame.new(18.5, 0, 0)
-        end
+    local function updateDiskCore(t)
+        -- sweeping dust anchors + drifting beaming glow + breathing rings
+        dustIn.CFrame  = diskBase0 * CFrame.Angles(0,  t * 0.9, 0)
+        dustOut.CFrame = diskBase0 * CFrame.Angles(0, -t * 0.3, 0)
+        doppler.CFrame = diskBase0 * CFrame.Angles(0, 0.9 + t * 0.28, 0) * CFrame.new(52, 0, 0)
+        photonC.Transparency = 0.02 + 0.04 * (0.5 + 0.5 * math.sin(t * 2.6))
+        haloT.Transparency   = 0.22 + 0.08 * (0.5 + 0.5 * math.sin(t * 1.9 + 1))
     end
 
     local function updateTwinkle(t)
@@ -917,34 +866,20 @@ local function main()
         end
     end
 
-    local diskBase = CFrame.new(HOLE) * diskTilt
-    local function updateDisk(t)
-        for _, s in ipairs(diskSegs) do
-            local ring = rings[s.ring]
-            local a   = (s.i / s.n) * math.pi * 2 + t * ring.speed + s.jitter * 0.01
-            local rr  = ring.r + 0.5 * math.sin(t * 1.7 + s.jitter)
-            local dop = 0.5 + 0.5 * math.cos(a - 0.9) -- relativistic beaming: one side burns brighter
-            s.part.Transparency = math.clamp(ring.base + 0.10 * math.sin(t * 3 + s.jitter) + 0.16 * (1 - dop), 0, 1)
-            s.part.CFrame = diskBase
-                * CFrame.Angles(0, a, 0)
-                * CFrame.new(rr, 0, 0)
-        end
-    end
-
     local function updateDebris(dt)
         for _, d in ipairs(debris) do
-            d.r   = d.r - dt * (5 + (130 - d.r) * 0.045)
+            d.r   = d.r - dt * (5 + (200 - d.r) * 0.045)
             d.ang = d.ang + dt * d.spd * (1 + 45 / (d.r + 8))
             d.h   = d.h * (1 - dt * 1.2)
-            if d.r < 18 then
+            if d.r < 26 then
                 glowPulse = math.min(glowPulse + 0.25, 2)
-                d.r   = 95 + math.random() * 70
+                d.r   = 130 + math.random() * 120
                 d.ang = math.random() * math.pi * 2
                 d.h   = (math.random() - 0.5) * 160
             end
-            local k = math.clamp(1 - (d.r - 18) / 120, 0, 1)
+            local k = math.clamp(1 - (d.r - 26) / 200, 0, 1)
             d.part.Color        = d.tint:Lerp(C_HOT, k)
-            d.part.Size         = Vector3.new(1, 1, 1) * (0.9 + k * 1.7)
+            d.part.Size         = Vector3.new(1, 1, 1) * (1.3 + k * 2.0)
             d.part.Transparency = 0.15 + 0.4 * (1 - k)
             d.part.CFrame = CFrame.new(HOLE) * diskTilt * d.tilt
                 * CFrame.Angles(0, d.ang, 0)
@@ -988,7 +923,7 @@ local function main()
                     st.part.Color  = st.color
                     st.part.Size   = st.size
                 else
-                    local rr = st.r0 * (1 - st.p) ^ 1.25 + 8
+                    local rr = st.r0 * (1 - st.p) ^ 1.25 + 20
                     local aa = st.a0 + st.p * 7
                     local hh = st.h0 * (1 - st.p)
                     st.part.Color = C_STAR:Lerp(C_HOT, st.p)
@@ -1015,14 +950,14 @@ local function main()
             if f.next <= 0 and f.life <= 0 then
                 f.life = f.max
                 f.ang  = math.random() * math.pi * 2
-                f.r    = 25 + math.random() * 8
+                f.r    = 30 + math.random() * 12
                 f.next = 1.2 + math.random() * 3.2
             end
             if f.life > 0 then
                 f.life = f.life - dt
                 local k = math.clamp(f.life / f.max, 0, 1)
                 f.part.Transparency = 1 - k * 0.85
-                f.part.Size = Vector3.new(0.6, 0.6, 3.4 + (1 - k) * 3)
+                f.part.Size = Vector3.new(1, 1, 1) * (2.2 + (1 - k) * 1.8)
                 f.part.CFrame = CFrame.new(HOLE) * diskTilt
                     * CFrame.Angles(0, f.ang + t * 1.4, 0)
                     * CFrame.new(f.r, 0, 0)
@@ -1032,76 +967,12 @@ local function main()
         end
     end
 
-    local function updateArms(t)
-        for _, s in ipairs(spiralArms) do
-            local a  = s.th0 + t * (0.55 - s.u * 0.32)
-            local rr = s.rr + 0.8 * math.sin(t * 1.6 + s.jit)
-            local yy = math.sin(a * 1.5 + s.jit) * (0.5 + s.u * 1.6)
-            s.part.Transparency = math.clamp(s.base + 0.08 * math.sin(t * 2.4 + s.jit), 0, 1)
-            s.part.CFrame = diskBase
-                * CFrame.Angles(0, a, 0)
-                * CFrame.new(rr, yy, 0)
-                * CFrame.Angles(0, s.yaw, 0)
-        end
-    end
-
-    local function updateColumn(t, dive)
-        local vis = 1 - math.clamp(dive * 1.2, 0, 1)
-        local function fade(base)
-            return 1 - (1 - base) * vis
-        end
-        local pulse = 0.5 + 0.5 * math.sin(t * 2.4)
-        column.beamIn.Size          = Vector3.new(4.6 + pulse * 0.9, 185, 4.6 + pulse * 0.9)
-        column.beamIn.Transparency  = fade(0.10 + pulse * 0.06)
-        column.beamOut.Transparency = fade(0.86 - pulse * 0.05)
-        column.tip.Transparency     = fade(0.70 + pulse * 0.08)
-        column.flare.Size           = Vector3.new(1, 1, 1) * (30 + pulse * 4 + glowPulse * 3) * (0.25 + 0.75 * vis)
-        column.flare.Transparency   = fade(0.08)
-        for i, pt in ipairs(column.petals) do
-            local a  = (i / #column.petals) * math.pi * 2 + t * 0.3
-            local sp = 9 + 2.5 * math.sin(t * 1.8 + i)
-            pt.Transparency = fade(0.30 + 0.14 * math.sin(t * 2.1 + i * 1.1))
-            pt.CFrame = CFrame.new(HOLE) * CFrame.Angles(0, a, 0)
-                * CFrame.new(0, 1.5 + math.sin(t * 1.3 + i) * 0.8, sp)
-        end
-        for _, hseg in ipairs(column.helix) do
-            local prog = ((hseg.k / hseg.hn) + t * 0.09) % 1
-            local a  = prog * math.pi * 4 + (hseg.strand - 1) * math.pi
-            local hh = 6 + prog * 186
-            local hr = 8.5 + 1.6 * math.sin(prog * math.pi)
-            local p1 = Vector3.new(math.cos(a) * hr, hh, math.sin(a) * hr)
-            local p2 = Vector3.new(math.cos(a + 0.16) * hr, hh + 2.4, math.sin(a + 0.16) * hr)
-            hseg.part.Transparency = fade(0.20 + 0.14 * math.sin(t * 3 + hseg.k))
-            hseg.part.CFrame = CFrame.lookAt(HOLE + p1, HOLE + p2)
-        end
-    end
-
-    local function updateCage(t, dive)
-        local vis = 1 - math.clamp(dive * 1.2, 0, 1)
-        sphereBall.Transparency = 1 - (1 - 0.94) * vis
-        sphereBall.Size         = Vector3.new(1, 1, 1) * (150 + 3 * math.sin(t * 1.1))
-        for _, cr in ipairs(cageRings) do
-            local ringCF = CFrame.new(HOLE) * CFrame.Angles(0, t * cr.spd, 0) * cr.axis
-            for i, seg in ipairs(cr.segs) do
-                local a = (i / cr.CN) * math.pi * 2
-                seg.Transparency = math.clamp((0.40 + 0.14 * math.sin(t * 1.7 + i * 0.7)) * vis + (1 - vis), 0, 1)
-                seg.CFrame = ringCF
-                    * CFrame.Angles(0, a, 0)
-                    * CFrame.new(cr.CR, 0, 0)
-            end
-        end
-    end
-
-    local function updateSpikes(t, shockP, dive)
-        local vis = 1 - math.clamp(dive * 1.2, 0, 1) -- REV-B/C: rays must die before the dive reaches them
-        for _, sp in ipairs(spikes) do
-            local a   = sp.phase + t * sp.spd
-            local dir = Vector3.new(math.cos(a), sp.elev, math.sin(a)).Unit
-            local l   = sp.len * (0.8 + 0.25 * math.sin(t * 1.3 + sp.phase))
-            local baseA = math.clamp(0.62 + 0.22 * math.sin(t * 1.9 + sp.phase * 5) - shockP * 0.5, 0.05, 1)
-            sp.part.Size = Vector3.new(0.5, 0.5, l)
-            sp.part.Transparency = 1 - (1 - baseA) * vis
-            sp.part.CFrame = CFrame.lookAt(HOLE + dir * (l / 2 + 13), HOLE + dir)
+    -- orbiting moon around the red rock world
+    local function updateMoon(t)
+        if moonP then
+            moonP.CFrame = moonCenter * moonTilt
+                * CFrame.Angles(0, t * 0.18, 0)
+                * CFrame.new(150, 0, 0)
         end
     end
 
@@ -1109,22 +980,14 @@ local function main()
         for idx = #shocks, 1, -1 do
             local sh = shocks[idx]
             sh.t = sh.t + dt
-            local k = sh.t / 1.7
+            local k = sh.t / 1.6
             if k >= 1 then
-                for _, sgm in ipairs(sh.segs) do
-                    sgm:Destroy()
-                end
+                sh.ball:Destroy()
                 table.remove(shocks, idx)
             else
-                local R  = 16 + 104 * (1 - (1 - k) * (1 - k))
-                local tr = 0.3 + 0.7 * k
-                for i, sgm in ipairs(sh.segs) do
-                    local a = (i / #sh.segs) * math.pi * 2
-                    sgm.Transparency = tr
-                    sgm.CFrame = CFrame.new(HOLE) * diskTilt
-                        * CFrame.Angles(0, a, 0)
-                        * CFrame.new(R, 0, 0)
-                end
+                local R = 30 + 330 * (1 - (1 - k) * (1 - k))
+                sh.ball.Size         = Vector3.new(1, 1, 1) * R
+                sh.ball.Transparency = 0.2 + 0.78 * k
             end
         end
     end
@@ -1229,7 +1092,7 @@ local function main()
     presents.Font                    = Enum.Font.GothamBlack
     presents.TextSize                = 30
     presents.Text                    = "L  E  G  E  N  D  S"
-    presents.TextColor3              = Color3.fromRGB(232, 220, 255)
+    presents.TextColor3              = Color3.fromRGB(255, 244, 224)
     presents.TextTransparency        = 1
     presents.TextStrokeTransparency  = 1
     presents.ZIndex                  = 10
@@ -1248,7 +1111,7 @@ local function main()
     title.TextTransparency       = 1
     title.ZIndex                 = 10
     local tg = Instance.new("UIGradient")
-    tg.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(206, 150, 255))
+    tg.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(255, 208, 138))
     tg.Parent = title
     local stroke = Instance.new("UIStroke")
     stroke.Thickness    = 2
@@ -1268,7 +1131,7 @@ local function main()
     sub.Font                   = Enum.Font.Gotham
     sub.TextSize               = 22
     sub.Text                   = "F O R G E D   I N   T H E   V O I D"
-    sub.TextColor3             = Color3.fromRGB(214, 196, 255)
+    sub.TextColor3             = Color3.fromRGB(255, 232, 200)
     sub.TextTransparency       = 1
     sub.ZIndex                 = 10
     sub.Parent                 = gui
@@ -1281,7 +1144,7 @@ local function main()
     sub2.Font                   = Enum.Font.GothamBold
     sub2.TextSize               = 20
     sub2.Text                   = "أسطورة بتتولد من العتمة"
-    sub2.TextColor3             = Color3.fromRGB(186, 152, 240)
+    sub2.TextColor3             = Color3.fromRGB(255, 210, 164)
     sub2.TextTransparency       = 1
     sub2.ZIndex                 = 10
     sub2.Parent                 = gui
@@ -1303,7 +1166,7 @@ local function main()
     skCorner.CornerRadius = UDim.new(0, 8)
     skCorner.Parent = skip
     local skStroke = Instance.new("UIStroke")
-    skStroke.Color        = Color3.fromRGB(150, 122, 220)
+    skStroke.Color        = Color3.fromRGB(232, 182, 110)
     skStroke.Transparency = 0.4
     skStroke.Parent       = skip
 
@@ -1423,8 +1286,8 @@ local function main()
         {t0 = 9,  t1 = 20, r0 = 470, r1 = 200, h0 = 60,  h1 = 85,  w0 = 0.13, fov0 = 64, fov1 = 58, rollA = 4,  shake = 0.30, a0 = 0.05,  ease = 1},
         {t0 = 20, t1 = 34, r0 = 200, r1 = 100, h0 = 85,  h1 = 45,  w0 = 0.21, fov0 = 58, fov1 = 70, rollA = 9,  shake = 0.80, a0 = 1.48,  ease = 1},
         {t0 = 34, t1 = 44, r0 = 100, r1 = 280, h0 = 45,  h1 = 120, w0 = 0.10, fov0 = 70, fov1 = 64, rollA = 3,  shake = 0.40, a0 = 4.42,  ease = 1},
-        {t0 = 44, t1 = 52, r0 = 280, r1 = 18,  h0 = 120, h1 = 8,   w0 = 0.27, fov0 = 64, fov1 = 86, rollA = 14, shake = 1.70, a0 = 5.42,  ease = 2},
-        {t0 = 52, t1 = 58, r0 = 18,  r1 = 17,  h0 = 8,   h1 = 6,   w0 = 0.15, fov0 = 86, fov1 = 92, rollA = 2,  shake = 0.50, a0 = 7.58,  ease = 0},
+        {t0 = 44, t1 = 52, r0 = 280, r1 = 40,  h0 = 120, h1 = 18,  w0 = 0.27, fov0 = 64, fov1 = 86, rollA = 14, shake = 1.70, a0 = 5.42,  ease = 2},
+        {t0 = 52, t1 = 58, r0 = 40,  r1 = 34,  h0 = 18,  h1 = 14,  w0 = 0.15, fov0 = 86, fov1 = 92, rollA = 2,  shake = 0.50, a0 = 7.58,  ease = 0},
     }
 
     local function easeSm(u)
@@ -1562,20 +1425,15 @@ local function main()
 
         local dive = math.clamp((t - 44) / 8, 0, 1)
 
-        updatePhoton(t)
-        updateLens(t)
-        updateDisk(t)
-        updateArms(t)
+        updateDiskCore(t)
         updateDebris(dt)
         updateSucked(dt)
         updateShocks(dt)
-        updateSpikes(t, shockPulse, dive)
         updateTwinkle(t)
         updateHotspots(t, dt)
         updateFlares(dt, t)
-        updateColumn(t, dive)
-        updateCage(t, dive)
         updateComets(dt)
+        updateMoon(t)
 
         shockPulse = shockPulse * (1 - dt * 2.2)
         glowPulse  = glowPulse * (1 - dt * 3)
@@ -1584,13 +1442,13 @@ local function main()
         cc.Brightness  = shockPulse * 0.10 - dive * 0.08
         cc.Contrast    = 0.08 + dive * 0.22
         cc.Saturation  = -0.05 - dive * 0.25
-        cc.TintColor   = Color3.new(1, 1, 1):Lerp(Color3.fromRGB(168, 124, 236), dive)
+        cc.TintColor   = Color3.new(1, 1, 1):Lerp(Color3.fromRGB(255, 172, 110), dive)
         bloom.Intensity = math.min(1.4 + 0.35 * math.sin(t * 1.3) + shockPulse * 0.7 + glowPulse * 0.35, isTouch and 1.8 or 2.6)
 
-        glow.Size         = Vector3.new(1, 1, 1) * (46 + glowPulse * 7)
-        glow.Transparency = 0.95 - glowPulse * 0.05
-        plight.Brightness = 1.8 + glowPulse * 1.4
-        core.Size         = Vector3.new(1, 1, 1) * (26 + 0.9 * math.sin(t * 2.6) + glowPulse * 1.2)
+        glow.Size         = Vector3.new(1, 1, 1) * (58 + glowPulse * 9)
+        glow.Transparency = 0.93 - glowPulse * 0.05
+        plight.Brightness = 2.0 + glowPulse * 1.6
+        core.Size         = Vector3.new(1, 1, 1) * (44 + 1.4 * math.sin(t * 2.6) + glowPulse * 1.8)
 
         local camNow = workspace.CurrentCamera
         if camNow then
@@ -1610,7 +1468,7 @@ local function main()
     end
 
     local function camStep(dtStep)
-        if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken then return end
+        if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken or not sceneFolder.Parent then return end
         local ok, err = pcall(stepFrame, dtStep)
         if not ok then
             warn("[LEGENDS] frame error:", err)
