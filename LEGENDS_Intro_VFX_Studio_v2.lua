@@ -1,5 +1,5 @@
 --=====================================================================
---  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3.5 (realistic Gargantua edition)
+--  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3.6 (realistic Gargantua edition)
 --  Pure VFX: no character, no fight -- a living black hole.
 --  Loader:
 --  loadstring(game:HttpGet("https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/LEGENDS_Intro_VFX_Studio_v2.lua"))()
@@ -15,18 +15,18 @@ local Debris       = game:GetService("Debris")
 local CONFIG = {
     DURATION     = 58,
     HOLE_POS     = Vector3.new(0, 5000, 0), -- far above the map: beyond streaming range, nothing of the world exists near here
-    STAR_COUNT   = 380,
+    STAR_COUNT   = 520,
     DEBRIS_COUNT = 44,
     SHOCK_TIMES  = {13, 20, 27, 34, 41, 47},
     SUCK_EVERY   = 2.8,
 }
 
--- v3.5 palette: real Gargantua look -- white-hot core -> gold -> orange -> burnt outer edge
+-- v3.6 palette: real Gargantua look -- white-hot core -> gold -> orange -> burnt outer edge
 local C_CORE   = Color3.fromRGB(255, 252, 240) -- blazing white-hot (inner edge)
 local C_HOT    = Color3.fromRGB(255, 236, 186) -- pale gold
 local C_EMBER  = Color3.fromRGB(255, 192, 104) -- gold-orange
-local C_PLASMA = Color3.fromRGB(255, 142, 56)  -- deep orange
-local C_ROSE   = Color3.fromRGB(198, 84, 30)   -- burnt red-orange outer fade
+local C_PLASMA = Color3.fromRGB(255, 136, 44)  -- vivid deep orange
+local C_ROSE   = Color3.fromRGB(188, 72, 24)   -- burnt red-orange outer fade
 local C_STAR   = Color3.fromRGB(255, 244, 224) -- warm star white
 local C_ICE    = Color3.fromRGB(168, 198, 255) -- cold blue (comets / ice giant only)
 
@@ -143,12 +143,14 @@ local function main()
     -- neutralize host-game post-processing (REV-B: a game ColorCorrection with
     -- Brightness > 0 or a wide Bloom would gray-wash the black void walls)
     saved.fxProps = {}
-    for _, fx in ipairs(Lighting:GetChildren()) do
-        if fx:IsA("PostEffect") and fx.Name:sub(1, 8) ~= "LEGENDS_" then
-            saved.fxProps[#saved.fxProps + 1] = { obj = fx, enabled = fx.Enabled }
-            fx.Enabled = false
+    pcall(function() -- REV-C: never let host-FX probing strand the restore path
+        for _, fx in ipairs(Lighting:GetChildren()) do
+            if fx:IsA("PostEffect") and fx.Name:sub(1, 8) ~= "LEGENDS_" then
+                saved.fxProps[#saved.fxProps + 1] = { obj = fx, enabled = fx.Enabled }
+                fx.Enabled = false
+            end
         end
-    end
+    end)
 
     --[[ emergency restore -- registered BEFORE the first mutation (v3.1) ]]--
     local function emergencyRestore()
@@ -256,7 +258,7 @@ local function main()
     local cc = Instance.new("ColorCorrectionEffect")
     cc.Name       = "LEGENDS_CC"
     cc.Brightness = 0
-    cc.Contrast   = 0.16
+    cc.Contrast   = 0.18
     cc.Saturation = -0.02
     cc.Parent     = Lighting
 
@@ -267,9 +269,9 @@ local function main()
 
     local bloom = Instance.new("BloomEffect")
     bloom.Name      = "LEGENDS_Bloom"
-    bloom.Intensity = 1.55
+    bloom.Intensity = 1.8
     bloom.Size      = isTouch and 24 or 40
-    bloom.Threshold = 0.88
+    bloom.Threshold = 0.82
     bloom.Parent    = Lighting
 
     -- pitch-black space skybox (100% independent of the game's gray sky)
@@ -394,14 +396,14 @@ local function main()
 
     local plight = Instance.new("PointLight")
     plight.Color      = C_HOT
-    plight.Brightness = 2.0
-    plight.Range      = 90
+    plight.Brightness = 2.4
+    plight.Range      = 60 -- engine max (REV-A: 140 silently clamps to 60)
     plight.Parent     = core
 
     local glow = part({
         Name         = "BH_Glow",
         Shape        = Enum.PartType.Ball,
-        Size         = Vector3.new(58, 58, 58),
+        Size         = Vector3.new(64, 64, 64),
         Color        = C_HOT,
         Transparency = 0.93,
         CFrame       = CFrame.new(HOLE),
@@ -415,14 +417,23 @@ local function main()
          every cylinder's center, so a solid disk reads as a glowing RING. ]]--
     local diskBase0 = CFrame.new(HOLE) * diskTilt
 
-    -- photon ring: razor-thin white-hot ring hugging the shadow
+    -- photon ring: white-hot disc crowning the shadow (thick enough to stay
+    -- visible above the terraced stack from any camera angle)
     local photonC = part({
         Name         = "BH_PhotonRing",
         Shape        = Enum.PartType.Cylinder,
-        Size         = Vector3.new(0.5, 52, 52), -- radius 26 around the r=22 core
+        Size         = Vector3.new(3.6, 52, 52), -- radius 26; thick enough to crown the r=33 stack (REV-B)
         Color        = C_CORE,
-        Transparency = 0.02,
+        Transparency = 0.01,
         CFrame       = CFrame.new(HOLE) * CFrame.Angles(0, 0, math.rad(90)), -- axis up -> flat ring
+    })
+    local photonB = part({ -- soft warm halo blooming just outside the photon ring
+        Name         = "BH_PhotonHalo",
+        Shape        = Enum.PartType.Cylinder,
+        Size         = Vector3.new(3.45, 57, 57),
+        Color        = C_HOT,
+        Transparency = 0.35,
+        CFrame       = CFrame.new(HOLE) * CFrame.Angles(0, 0, math.rad(90)),
     })
 
     -- lensed halo: vertical ring arcing over/under the shadow (Interstellar signature)
@@ -436,17 +447,34 @@ local function main()
             * CFrame.Angles(math.rad(90), 0, 0)
             * CFrame.Angles(0, 0, math.rad(90)),
     })
+    local haloB = part({ -- wider, fainter companion arc for depth
+        Name         = "BH_LensHaloB",
+        Shape        = Enum.PartType.Cylinder,
+        Size         = Vector3.new(0.5, 68, 68),
+        Color        = C_EMBER,
+        Transparency = 0.52,
+        CFrame       = CFrame.new(HOLE) * diskTilt
+            * CFrame.Angles(math.rad(90), 0, 0)
+            * CFrame.Angles(0, 0, math.rad(90)),
+    })
 
-    -- smooth accretion disk: stacked flat cylinders, white-hot inner edge -> burnt rim
+    -- smooth accretion disk (REV-B fix): ONE terraced stack -- thickness DECREASES
+    -- outward so the white-hot inner edge is always the highest surface (never
+    -- sheathed by outer layers), and alternating bright ridges / dim valleys
+    -- carve the classic Gargantua striations. All heights distinct -> zero z-fighting.
     local DISK_CYLS = {
-        {r = 32,  h = 0.7, c = C_CORE,   tr = 0.05},
-        {r = 40,  h = 0.9, c = C_HOT,    tr = 0.10},
-        {r = 49,  h = 1.1, c = C_EMBER,  tr = 0.16},
-        {r = 59,  h = 1.3, c = C_EMBER,  tr = 0.24},
-        {r = 70,  h = 1.6, c = C_PLASMA, tr = 0.60}, -- outer layers kept faint so the
-        {r = 83,  h = 1.9, c = C_PLASMA, tr = 0.68}, -- white-hot inner edge reads
-        {r = 97,  h = 2.2, c = C_ROSE,   tr = 0.76}, -- through the stack (REV-B)
-        {r = 112, h = 2.6, c = C_ROSE,   tr = 0.83},
+        {r = 33,  h = 3.10, c = C_CORE,   tr = 0.02}, -- white-hot inner disc
+        {r = 38,  h = 2.90, c = C_HOT,    tr = 0.10}, -- valley
+        {r = 42,  h = 2.85, c = C_HOT,    tr = 0.06}, -- bright gold ridge
+        {r = 47,  h = 2.60, c = C_EMBER,  tr = 0.20}, -- valley
+        {r = 53,  h = 2.55, c = C_EMBER,  tr = 0.10}, -- bright ember ridge
+        {r = 60,  h = 2.30, c = C_PLASMA, tr = 0.28}, -- valley
+        {r = 68,  h = 2.25, c = C_PLASMA, tr = 0.16}, -- bright orange ridge
+        {r = 77,  h = 2.00, c = C_ROSE,   tr = 0.34}, -- valley
+        {r = 88,  h = 1.95, c = C_ROSE,   tr = 0.30}, -- ridge
+        {r = 101, h = 1.70, c = C_ROSE,   tr = 0.48}, -- valley
+        {r = 116, h = 1.65, c = C_ROSE,   tr = 0.58}, -- ridge
+        {r = 134, h = 1.40, c = C_ROSE,   tr = 0.72}, -- burnt outer rim
     }
     for _, dc in ipairs(DISK_CYLS) do
         part({
@@ -459,14 +487,24 @@ local function main()
         })
     end
 
+    -- soft outer haze so the rim melts into the void instead of stopping dead
+    part({
+        Name         = "BH_DiskHaze",
+        Shape        = Enum.PartType.Cylinder,
+        Size         = Vector3.new(1.2, 316, 316),
+        Color        = C_ROSE,
+        Transparency = 0.90,
+        CFrame       = diskBase0 * CFrame.Angles(0, 0, math.rad(90)),
+    })
+
     -- relativistic beaming: one side of the disk burns brighter (soft stretched glow)
     local doppler = part({
         Name         = "BH_Doppler",
         Shape        = Enum.PartType.Ball,
-        Size         = Vector3.new(18, 9, 46),
+        Size         = Vector3.new(22, 10, 58),
         Color        = C_HOT,
-        Transparency = 0.78,
-        CFrame       = diskBase0 * CFrame.Angles(0, 0.9, 0) * CFrame.new(52, 0, 0),
+        Transparency = 0.72,
+        CFrame       = diskBase0 * CFrame.Angles(0, 0.9, 0) * CFrame.new(56, 0, 0),
     })
 
     -- orbiting dust: rotating invisible anchors make particles spawn along sweeping
@@ -500,7 +538,7 @@ local function main()
         Transparency = 1,
         CFrame       = diskBase0,
     })
-    dustEmitter(dustIn, isTouch and 50 or 100, 0.35, 1.1, 1.7, C_CORE, C_EMBER)
+    dustEmitter(dustIn, isTouch and 62 or 130, 0.4, 1.3, 1.7, C_CORE, C_EMBER)
 
     local dustOut = part({
         Name         = "BH_DustOut",
@@ -508,7 +546,7 @@ local function main()
         Transparency = 1,
         CFrame       = diskBase0,
     })
-    dustEmitter(dustOut, isTouch and 24 or 48, 0.7, 2.1, 2.6, C_HOT, C_PLASMA)
+    dustEmitter(dustOut, isTouch and 30 or 62, 0.8, 2.4, 2.6, C_HOT, C_PLASMA)
 
     -- faint stardust drifting through the void (depth parallax)
     local voidDust = part({
@@ -592,9 +630,9 @@ local function main()
         }
     end
 
-    -- starfield (v3.5: DOUBLE the stars)
+    -- starfield (v3.6: denser field + bigger bright giants)
     local stars = {}
-    local starN = isTouch and 240 or CONFIG.STAR_COUNT
+    local starN = isTouch and 300 or CONFIG.STAR_COUNT
     local starPalette = {
         Color3.fromRGB(214, 226, 255), -- blue-white
         Color3.fromRGB(255, 244, 230), -- warm white
@@ -602,12 +640,13 @@ local function main()
         Color3.fromRGB(190, 235, 255), -- pale cyan
     }
     for i = 1, starN do
-        local giant = (i <= 10)
+        local giant = (i <= 14)
         local dist  = 260 + math.random() * 560
         local pos   = HOLE + randomUnit() * dist
         local s = part({
             Name         = "BH_Star",
-            Size         = Vector3.new(1, 1, 1) * (giant and (2.6 + math.random() * 1.0) or (0.7 + math.random() * 1.2)),
+            Shape        = Enum.PartType.Ball, -- REV-B: never Blocks (the square-star bug)
+            Size         = Vector3.new(1, 1, 1) * (giant and (3.2 + math.random() * 1.4) or (0.8 + math.random() * 1.4)),
             Color        = giant and Color3.fromRGB(255, 250, 240) or starPalette[math.random(#starPalette)],
             Transparency = giant and 0.02 or (0.05 + math.random() * 0.35),
             CFrame       = CFrame.new(pos),
@@ -620,12 +659,13 @@ local function main()
 
     -- far star layer: a deep curtain of tiny static stars near the walls
     do
-        local farN = isTouch and 90 or 160
+        local farN = isTouch and 120 or 220
         for i = 1, farN do
             local dist = 640 + math.random() * 330
             part({
                 Name         = "BH_FarStar",
-                Size         = Vector3.new(1, 1, 1) * (0.5 + math.random() * 0.7),
+                Shape        = Enum.PartType.Ball,
+                Size         = Vector3.new(1, 1, 1) * (0.6 + math.random() * 0.8),
                 Color        = starPalette[math.random(#starPalette)],
                 Transparency = 0.3 + math.random() * 0.35,
                 CFrame       = CFrame.new(HOLE + randomUnit() * dist),
@@ -643,7 +683,7 @@ local function main()
         local j = math.random(i)
         tidx[i], tidx[j] = tidx[j], tidx[i]
     end
-    for i = 1, math.min(isTouch and 45 or 110, #tidx) do
+    for i = 1, math.min(isTouch and 55 or 130, #tidx) do
         twinkle[i] = {
             part  = stars[tidx[i]].part,
             star  = stars[tidx[i]],
@@ -678,73 +718,252 @@ local function main()
         })
     end
 
-    --[[ planets: a small system scattered in the void -- v3.5: MORE + BIGGER,
-         all self-lit Neon (Lighting is pitch black out here, plastic would vanish) ]]--
+    --[[ planets: a small system scattered in the void -- v3.6 rebuild:
+         layered atmosphere shells, rotating surface details, ring systems
+         with real gaps, two brand-new worlds. All self-lit Neon (Lighting
+         is pitch black out here, plastic would vanish). ]]--
     local moonP, moonCenter, moonTilt
+    local spinners = {} -- rotating surface details {cf0, spd, kids={{p, off}}}
+
+    local function surfaceDetail(pos, rad, spd, color, n, sMin, sMax, tr)
+        local kids = {}
+        for _ = 1, n do
+            local u = randomUnit()
+            kids[#kids + 1] = {
+                p = part({
+                    Name         = "BH_Surface",
+                    Shape        = Enum.PartType.Ball,
+                    Size         = Vector3.new(1, 1, 1) * (sMin + math.random() * (sMax - sMin)),
+                    Color        = color,
+                    Transparency = tr,
+                    CFrame       = CFrame.new(pos),
+                }),
+                off = CFrame.new(u * (rad * 0.97)) -- REV-B: 0.88 swallowed small blotches
+                    * CFrame.Angles(math.random() * 3, math.random() * 3, math.random() * 3),
+            }
+        end
+        spinners[#spinners + 1] = { cf0 = CFrame.new(pos), spd = spd, kids = kids }
+    end
+
     do
-        -- P1: giant ringed world (Saturn-like, much bigger)
-        local p1Pos = HOLE + Vector3.new(-0.6, 0.22, 0.76).Unit * 760
+        -- P1: giant ringed world (Saturn-like): warm cream bands + a REAL
+        -- ring system built from concentric thin rings with gaps between them
+        local p1R   = 170
+        local p1Pos = HOLE + Vector3.new(-0.6, 0.22, 0.76).Unit * 745
         part({
             Name         = "BH_Planet1",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(150, 150, 150),
-            Color        = Color3.fromRGB(214, 176, 128),
+            Size         = Vector3.new(1, 1, 1) * p1R * 2,
+            Color        = Color3.fromRGB(216, 180, 132),
             Transparency = 0.04,
             CFrame       = CFrame.new(p1Pos),
         })
+        part({ -- soft band shell
+            Name         = "BH_Planet1Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p1R * 2 * 1.045,
+            Color        = Color3.fromRGB(226, 196, 150),
+            Transparency = 0.55,
+            CFrame       = CFrame.new(p1Pos),
+        })
+        part({ -- faint outer haze
+            Name         = "BH_Planet1Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p1R * 2 * 1.09,
+            Color        = Color3.fromRGB(198, 160, 118),
+            Transparency = 0.75,
+            CFrame       = CFrame.new(p1Pos),
+        })
         local ringTilt = CFrame.Angles(math.rad(74), 0, math.rad(18))
-        for ri, pr in ipairs({ 210, 262 }) do
+        local ringBands = {
+            { r = 208, h = 0.30, tr = 0.50, c = Color3.fromRGB(222, 196, 158) },
+            { r = 224, h = 0.36, tr = 0.32, c = Color3.fromRGB(232, 206, 168) },
+            { r = 241, h = 0.42, tr = 0.62, c = Color3.fromRGB(210, 184, 148) }, -- gap band
+            { r = 258, h = 0.48, tr = 0.38, c = Color3.fromRGB(236, 214, 178) },
+            { r = 268, h = 0.54, tr = 0.58, c = Color3.fromRGB(218, 192, 152) },
+        }
+        for _, rb in ipairs(ringBands) do
             part({
                 Name         = "BH_Planet1Ring",
                 Shape        = Enum.PartType.Cylinder,
-                Size         = Vector3.new(ri == 1 and 1.4 or 2.4, pr * 2, pr * 2),
-                Color        = Color3.fromRGB(226, 200, 160),
-                Transparency = (ri == 1) and 0.55 or 0.72,
+                Size         = Vector3.new(rb.h, rb.r * 2, rb.r * 2), -- distinct h per band: no coincident faces (REV-B)
+                Color        = rb.c,
+                Transparency = rb.tr,
                 CFrame       = CFrame.new(p1Pos) * CFrame.Angles(0, 0, math.rad(90)) * ringTilt,
             })
         end
+        do -- shimmering sparkle ring riding the bands (8 orbiting emitters)
+            local ringCF = CFrame.new(p1Pos) * CFrame.Angles(0, 0, math.rad(90)) * ringTilt
+            local kids = {}
+            for ai = 1, 8 do
+                local a  = (ai / 8) * math.pi * 2
+                local em = part({
+                    Name         = "BH_RingSpark",
+                    Size         = Vector3.new(2, 2, 2),
+                    Transparency = 1,
+                    CFrame       = ringCF * CFrame.new(0, math.cos(a) * 240, math.sin(a) * 240),
+                })
+                local pe = Instance.new("ParticleEmitter")
+                pe.Texture        = "rbxasset://textures/particles/sparkles_main.dds"
+                pe.Rate           = isTouch and 2.5 or 5
+                pe.Speed          = NumberRange.new(0, 0.2)
+                pe.Lifetime       = NumberRange.new(0.9, 1.6)
+                pe.LightEmission  = 1
+                pe.LightInfluence = 0
+                pe.Size = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0.4),
+                    NumberSequenceKeypoint.new(1, 1.0),
+                })
+                pe.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0.35),
+                    NumberSequenceKeypoint.new(1, 1),
+                })
+                pe.Color  = ColorSequence.new(Color3.fromRGB(238, 216, 182), Color3.fromRGB(216, 186, 146))
+                pe.Parent = em
+                kids[#kids + 1] = { p = em, off = CFrame.new(0, math.cos(a) * 240, math.sin(a) * 240) }
+            end
+            spinners[#spinners + 1] = { cf0 = ringCF, spd = 0.10, ax = "x", kids = kids }
+        end
 
-        -- P2: ice giant (cold blue, far side)
-        local p2Pos = HOLE + Vector3.new(0.55, -0.18, 0.62).Unit * 830
+        -- P2: ice giant (cold blue, far side): cloud deck + deep glow halo
+        local p2R   = 130
+        local p2Pos = HOLE + Vector3.new(0.55, -0.18, 0.62).Unit * 820
         part({
             Name         = "BH_Planet2",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(110, 110, 110),
-            Color        = Color3.fromRGB(140, 182, 238),
+            Size         = Vector3.new(1, 1, 1) * p2R * 2,
+            Color        = Color3.fromRGB(108, 152, 220),
             Transparency = 0.05,
             CFrame       = CFrame.new(p2Pos),
         })
+        part({ -- pale cloud deck
+            Name         = "BH_Planet2Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(p2R * 2 * 1.06, p2R * 2 * 1.01, p2R * 2 * 1.06),
+            Color        = Color3.fromRGB(225, 238, 252),
+            Transparency = 0.82,
+            CFrame       = CFrame.new(p2Pos),
+        })
+        part({
+            Name         = "BH_Planet2Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p2R * 2 * 1.14,
+            Color        = Color3.fromRGB(140, 190, 255),
+            Transparency = 0.84,
+            CFrame       = CFrame.new(p2Pos),
+        })
+        part({
+            Name         = "BH_Planet2Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p2R * 2 * 1.28,
+            Color        = Color3.fromRGB(120, 170, 240),
+            Transparency = 0.92,
+            CFrame       = CFrame.new(p2Pos),
+        })
 
-        -- P3: red rock world + orbiting moon
-        local p3Pos = HOLE + Vector3.new(0.2, 0.35, -0.85).Unit * 700
+        -- P3: red rock world: rust deserts + dark maria + dusty glow + moon
+        local p3R   = 92
+        local p3Pos = HOLE + Vector3.new(0.2, 0.35, -0.85).Unit * 690
         part({
             Name         = "BH_Planet3",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(84, 84, 84),
-            Color        = Color3.fromRGB(196, 112, 72),
-            Transparency = 0.05,
+            Size         = Vector3.new(1, 1, 1) * p3R * 2,
+            Color        = Color3.fromRGB(198, 116, 74),
+            Transparency = 0.04,
+            CFrame       = CFrame.new(p3Pos),
+        })
+        surfaceDetail(p3Pos, p3R, 0.05, Color3.fromRGB(128, 62, 38), 7, 16, 30, 0.42)    -- dark maria
+        surfaceDetail(p3Pos, p3R, 0.05, Color3.fromRGB(226, 168, 110), 5, 14, 24, 0.50)  -- bright deserts
+        part({
+            Name         = "BH_Planet3Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p3R * 2 * 1.12,
+            Color        = Color3.fromRGB(255, 160, 96),
+            Transparency = 0.85,
             CFrame       = CFrame.new(p3Pos),
         })
         moonP = part({
             Name         = "BH_Moon",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(22, 22, 22),
-            Color        = Color3.fromRGB(190, 190, 198),
-            Transparency = 0.1,
+            Size         = Vector3.new(26, 26, 26),
+            Color        = Color3.fromRGB(196, 196, 206),
+            Transparency = 0.08,
             CFrame       = CFrame.new(p3Pos),
         })
         moonCenter = CFrame.new(p3Pos)
         moonTilt   = CFrame.Angles(math.rad(24), 0, math.rad(10))
 
-        -- P4: molten world near the hole (glows with captured heat)
+        -- P4: molten world near the hole: dark crust, white-hot heart, lava veins
+        local p4R   = 64
         local p4Pos = HOLE + Vector3.new(-0.35, 0.4, -0.55).Unit * 430
+        part({
+            Name         = "BH_MagmaHeart",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(96, 96, 96),
+            Color        = Color3.fromRGB(255, 140, 50),
+            Transparency = 0.05,
+            CFrame       = CFrame.new(p4Pos),
+        })
         part({
             Name         = "BH_Planet4",
             Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(48, 48, 48),
-            Color        = Color3.fromRGB(255, 138, 54),
-            Transparency = 0.1,
+            Size         = Vector3.new(1, 1, 1) * p4R * 2,
+            Color        = Color3.fromRGB(96, 30, 14),
+            Transparency = 0.45,
             CFrame       = CFrame.new(p4Pos),
+        })
+        surfaceDetail(p4Pos, p4R, 0.09, Color3.fromRGB(255, 176, 64), 6, 10, 18, 0.22)   -- lava veins
+        part({
+            Name         = "BH_Planet4Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p4R * 2 * 1.16,
+            Color        = Color3.fromRGB(255, 140, 60),
+            Transparency = 0.80,
+            CFrame       = CFrame.new(p4Pos),
+        })
+
+        -- P5: ocean paradise (NEW): blue marble, green continents,
+        -- drifting clouds and a bright sky-blue halo
+        local p5R   = 104
+        local p5Pos = HOLE + Vector3.new(0.88, -0.02, 0.42).Unit * 640
+        part({
+            Name         = "BH_Planet5",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p5R * 2,
+            Color        = Color3.fromRGB(30, 96, 178),
+            Transparency = 0.04,
+            CFrame       = CFrame.new(p5Pos),
+        })
+        surfaceDetail(p5Pos, p5R, 0.04, Color3.fromRGB(66, 142, 86), 8, 20, 40, 0.22)    -- continents
+        surfaceDetail(p5Pos, p5R, 0.04, Color3.fromRGB(196, 168, 110), 3, 14, 22, 0.38)  -- deserts
+        surfaceDetail(p5Pos, p5R, 0.07, Color3.fromRGB(242, 248, 254), 5, 24, 42, 0.60)  -- drifting clouds
+        part({
+            Name         = "BH_Planet5Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p5R * 2 * 1.16,
+            Color        = Color3.fromRGB(120, 180, 255),
+            Transparency = 0.80,
+            CFrame       = CFrame.new(p5Pos),
+        })
+
+        -- P6: pale ice dwarf (NEW): tiny cold world glowing arctic blue
+        local p6R   = 58
+        local p6Pos = HOLE + Vector3.new(-0.75, -0.25, -0.45).Unit * 900
+        part({
+            Name         = "BH_Planet6",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p6R * 2,
+            Color        = Color3.fromRGB(176, 208, 236),
+            Transparency = 0.06,
+            CFrame       = CFrame.new(p6Pos),
+        })
+        part({
+            Name         = "BH_Planet6Shell",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(1, 1, 1) * p6R * 2 * 1.18,
+            Color        = C_ICE,
+            Transparency = 0.82,
+            CFrame       = CFrame.new(p6Pos),
         })
     end
 
@@ -817,11 +1036,13 @@ local function main()
     --[[ per-frame updates ]]--
     local function updateDiskCore(t)
         -- sweeping dust anchors + drifting beaming glow + breathing rings
-        dustIn.CFrame  = diskBase0 * CFrame.Angles(0,  t * 0.9, 0)
-        dustOut.CFrame = diskBase0 * CFrame.Angles(0, -t * 0.3, 0)
-        doppler.CFrame = diskBase0 * CFrame.Angles(0, 0.9 + t * 0.28, 0) * CFrame.new(52, 0, 0)
-        photonC.Transparency = 0.02 + 0.04 * (0.5 + 0.5 * math.sin(t * 2.6))
+        dustIn.CFrame  = diskBase0 * CFrame.new(0, 2.2, 0) * CFrame.Angles(0,  t * 0.9, 0)
+        dustOut.CFrame = diskBase0 * CFrame.new(0, 1.6, 0) * CFrame.Angles(0, -t * 0.3, 0)
+        doppler.CFrame = diskBase0 * CFrame.Angles(0, 0.9 + t * 0.28, 0) * CFrame.new(56, 0, 0)
+        photonC.Transparency = 0.01 + 0.03 * (0.5 + 0.5 * math.sin(t * 2.6))
+        photonB.Transparency = 0.33 + 0.08 * (0.5 + 0.5 * math.sin(t * 2.6 + 0.7))
         haloT.Transparency   = 0.22 + 0.08 * (0.5 + 0.5 * math.sin(t * 1.9 + 1))
+        haloB.Transparency   = 0.50 + 0.10 * (0.5 + 0.5 * math.sin(t * 1.9 + 2.2))
     end
 
     local function updateTwinkle(t)
@@ -940,7 +1161,7 @@ local function main()
             local w = 1.6 * math.sin(t * 2 + hs.ang * 3)
             hs.part.CFrame = CFrame.new(HOLE) * diskTilt
                 * CFrame.Angles(0, hs.ang, 0)
-                * CFrame.new(hs.r + w, hs.hgt, 0)
+                * CFrame.new(hs.r + w, hs.hgt + 2.8, 0)
         end
     end
 
@@ -960,7 +1181,7 @@ local function main()
                 f.part.Size = Vector3.new(1, 1, 1) * (2.2 + (1 - k) * 1.8)
                 f.part.CFrame = CFrame.new(HOLE) * diskTilt
                     * CFrame.Angles(0, f.ang + t * 1.4, 0)
-                    * CFrame.new(f.r, 0, 0)
+                    * CFrame.new(f.r, 2.4, 0)
             else
                 f.part.Transparency = 1
             end
@@ -976,6 +1197,21 @@ local function main()
         end
     end
 
+    -- rotating surface details (continents / clouds / ring sparkles) -- v3.6
+    local function updatePlanets(t)
+        for _, sp in ipairs(spinners) do
+            local w
+            if sp.ax == "x" then -- ring-plane spin: rotate about the cylinder axis (REV-B)
+                w = sp.cf0 * CFrame.Angles(t * sp.spd, 0, 0)
+            else
+                w = sp.cf0 * CFrame.Angles(0, t * sp.spd, 0)
+            end
+            for _, k in ipairs(sp.kids) do
+                k.p.CFrame = w * k.off
+            end
+        end
+    end
+
     local function updateShocks(dt)
         for idx = #shocks, 1, -1 do
             local sh = shocks[idx]
@@ -985,7 +1221,7 @@ local function main()
                 sh.ball:Destroy()
                 table.remove(shocks, idx)
             else
-                local R = 30 + 330 * (1 - (1 - k) * (1 - k))
+                local R = 30 + 70 * (1 - (1 - k) * (1 - k)) -- capped inside the closest camera pass (REV-B)
                 sh.ball.Size         = Vector3.new(1, 1, 1) * R
                 sh.ball.Transparency = 0.2 + 0.78 * k
             end
@@ -1401,6 +1637,8 @@ local function main()
         Lighting.FogColor = Color3.new(0, 0, 0)
         Lighting.FogStart = 300
         Lighting.FogEnd   = 2800
+        Lighting.Brightness = 0 -- REV-C: hosts may rewrite these every frame too
+        Lighting.Ambient    = Color3.new(0, 0, 0)
         pcall(function()
             local at2 = Lighting:FindFirstChildOfClass("Atmosphere")
             if at2 then
@@ -1434,6 +1672,7 @@ local function main()
         updateFlares(dt, t)
         updateComets(dt)
         updateMoon(t)
+        updatePlanets(t)
 
         shockPulse = shockPulse * (1 - dt * 2.2)
         glowPulse  = glowPulse * (1 - dt * 3)
@@ -1443,11 +1682,11 @@ local function main()
         cc.Contrast    = 0.08 + dive * 0.22
         cc.Saturation  = -0.05 - dive * 0.25
         cc.TintColor   = Color3.new(1, 1, 1):Lerp(Color3.fromRGB(255, 172, 110), dive)
-        bloom.Intensity = math.min(1.4 + 0.35 * math.sin(t * 1.3) + shockPulse * 0.7 + glowPulse * 0.35, isTouch and 1.8 or 2.6)
+        bloom.Intensity = math.min(1.55 + 0.35 * math.sin(t * 1.3) + shockPulse * 0.7 + glowPulse * 0.35, isTouch and 2.0 or 2.9)
 
-        glow.Size         = Vector3.new(1, 1, 1) * (58 + glowPulse * 9)
+        glow.Size         = Vector3.new(1, 1, 1) * (64 + glowPulse * 9)
         glow.Transparency = 0.93 - glowPulse * 0.05
-        plight.Brightness = 2.0 + glowPulse * 1.6
+        plight.Brightness = 2.4 + glowPulse * 1.8
         core.Size         = Vector3.new(1, 1, 1) * (44 + 1.4 * math.sin(t * 2.6) + glowPulse * 1.8)
 
         local camNow = workspace.CurrentCamera
@@ -1468,7 +1707,11 @@ local function main()
     end
 
     local function camStep(dtStep)
-        if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken or not sceneFolder.Parent then return end
+        if dead or genv.LEGENDS_INTRO_TOKEN ~= myToken then return end
+        if not sceneFolder.Parent then -- external wipe: restore instead of idling (REV-C)
+            cleanup()
+            return
+        end
         local ok, err = pcall(stepFrame, dtStep)
         if not ok then
             warn("[LEGENDS] frame error:", err)
