@@ -14,7 +14,7 @@ local Debris       = game:GetService("Debris")
 
 local CONFIG = {
     DURATION     = 58,
-    HOLE_POS     = Vector3.new(0, 1500, 0),
+    HOLE_POS     = Vector3.new(0, 3000, 0),
     STAR_COUNT   = 170,
     DEBRIS_COUNT = 44,
     SHOCK_TIMES  = {13, 20, 27, 34, 41, 47},
@@ -121,15 +121,7 @@ local function main()
             StarCount = oldSky.StarCount,
         }
         pcall(function()
-            oldSky.SkyboxBk = ""
-            oldSky.SkyboxDn = ""
-            oldSky.SkyboxFt = ""
-            oldSky.SkyboxLf = ""
-            oldSky.SkyboxRt = ""
-            oldSky.SkyboxUp = ""
-            oldSky.SunVisible = false
-            oldSky.MoonVisible = false
-            oldSky.StarCount = 0
+            oldSky.Parent = nil -- detach entirely; our own black Sky replaces it
         end)
     end
 
@@ -186,7 +178,7 @@ local function main()
             if saved.skyProps then
                 local s = saved.skyProps
                 local o = s.obj
-                if o and o.Parent then
+                if o then
                     o.SkyboxBk = s.Bk
                     o.SkyboxDn = s.Dn
                     o.SkyboxFt = s.Ft
@@ -196,6 +188,7 @@ local function main()
                     o.SunVisible  = s.SunVisible
                     o.MoonVisible = s.MoonVisible
                     o.StarCount   = s.StarCount
+                    o.Parent = Lighting
                 end
             end
         end)
@@ -210,7 +203,7 @@ local function main()
             end
         end)
         pcall(function()
-            for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom"}) do
+            for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom", "LEGENDS_Sky"}) do
                 local o = Lighting:FindFirstChild(n)
                 if o then
                     o:Destroy()
@@ -234,14 +227,14 @@ local function main()
 
     --[[ lighting ]]--
     Lighting.Brightness           = 0
-    Lighting.Ambient              = Color3.fromRGB(3, 3, 7)
-    Lighting.OutdoorAmbient       = Color3.fromRGB(5, 5, 10)
+    Lighting.Ambient              = Color3.new(0, 0, 0)
+    Lighting.OutdoorAmbient       = Color3.new(0, 0, 0)
     Lighting.ClockTime            = 0
-    Lighting.FogColor             = Color3.fromRGB(4, 4, 10)
+    Lighting.FogColor             = Color3.new(0, 0, 0)
     Lighting.FogStart             = 300
     Lighting.FogEnd               = 2800
     Lighting.GlobalShadows        = false
-    Lighting.ExposureCompensation = 0.05
+    Lighting.ExposureCompensation = 0
 
     local cc = Instance.new("ColorCorrectionEffect")
     cc.Name       = "LEGENDS_CC"
@@ -261,6 +254,20 @@ local function main()
     bloom.Size      = 32
     bloom.Threshold = 0.95
     bloom.Parent    = Lighting
+
+    -- pitch-black space skybox (100% independent of the game's gray sky)
+    local blackSky = Instance.new("Sky")
+    blackSky.Name        = "LEGENDS_Sky"
+    blackSky.SkyboxBk    = ""
+    blackSky.SkyboxDn    = ""
+    blackSky.SkyboxFt    = ""
+    blackSky.SkyboxLf    = ""
+    blackSky.SkyboxRt    = ""
+    blackSky.SkyboxUp    = ""
+    blackSky.SunVisible  = false
+    blackSky.MoonVisible = false
+    blackSky.StarCount   = 0
+    blackSky.Parent      = Lighting
 
     --[[ helpers ]]--
     local HOLE = CONFIG.HOLE_POS
@@ -861,7 +868,7 @@ local function main()
     vignette(0,   UDim2.new(0, 0, 0, 0),    UDim2.new(0, 96, 1, 0))
     vignette(180, UDim2.new(1, -96, 0, 0),  UDim2.new(0, 96, 1, 0))
 
-    local blackout = newFrame(8, 1)
+    local blackout = newFrame(8, 0) -- starts fully black: no gray flash before camera takes over
     blackout.Size = UDim2.new(1, 0, 1, 0)
     local flash = newFrame(9, 1, Color3.new(1, 1, 1))
     flash.Size = UDim2.new(1, 0, 1, 0)
@@ -1002,7 +1009,7 @@ local function main()
             if saved.skyProps then
                 local s = saved.skyProps
                 local o = s.obj
-                if o and o.Parent then
+                if o then
                     o.SkyboxBk = s.Bk
                     o.SkyboxDn = s.Dn
                     o.SkyboxFt = s.Ft
@@ -1012,6 +1019,7 @@ local function main()
                     o.SunVisible = s.SunVisible
                     o.MoonVisible = s.MoonVisible
                     o.StarCount = s.StarCount
+                    o.Parent = Lighting
                 end
             end
         end)
@@ -1029,6 +1037,10 @@ local function main()
             cc:Destroy()
             blur:Destroy()
             bloom:Destroy()
+            local bs = Lighting:FindFirstChild("LEGENDS_Sky")
+            if bs then
+                bs:Destroy()
+            end
         end)
         pcall(function()
             if sceneFolder then
@@ -1119,6 +1131,10 @@ local function main()
     task.delay(5.5, function()
         if dead then return end
         tw(presents, {TextTransparency = 1, TextStrokeTransparency = 1}, 1.4)
+    end)
+    task.delay(1.3, function()
+        if dead then return end
+        tw(blackout, {BackgroundTransparency = 1}, 1.4)
     end)
     task.delay(44, function()
         if dead then return end
