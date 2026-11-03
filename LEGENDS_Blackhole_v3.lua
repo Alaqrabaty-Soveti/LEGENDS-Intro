@@ -67,6 +67,7 @@ local function main()
     local soundFolder = nil
     local gui         = nil
     local cleanup     = nil
+    local myBlackSky  = nil
     local glowPulse   = 0
     local shockPulse  = 0
     local saved       = {}
@@ -110,16 +111,12 @@ local function main()
     }
 
     -- blank any custom sky (gray skybox fix) + kill haze
+    -- NOTE: we never touch the old sky's properties, so restoring it = re-parenting only.
+    -- (property reads like SunVisible do not exist on Sky and crashed the whole intro)
     saved.skyProps = nil
     local oldSky = Lighting:FindFirstChildOfClass("Sky")
-    if oldSky then
-        saved.skyProps = {
-            obj = oldSky,
-            Bk = oldSky.SkyboxBk, Dn = oldSky.SkyboxDn, Ft = oldSky.SkyboxFt,
-            Lf = oldSky.SkyboxLf, Rt = oldSky.SkyboxRt, Up = oldSky.SkyboxUp,
-            SunVisible = oldSky.SunVisible, MoonVisible = oldSky.MoonVisible,
-            StarCount = oldSky.StarCount,
-        }
+    if oldSky and oldSky.Name ~= "LEGENDS_Sky" then
+        saved.skyProps = { obj = oldSky }
         pcall(function()
             oldSky.Parent = nil -- detach entirely; our own black Sky replaces it
         end)
@@ -175,21 +172,12 @@ local function main()
             end
         end)
         pcall(function()
-            if saved.skyProps then
-                local s = saved.skyProps
-                local o = s.obj
-                if o then
-                    o.SkyboxBk = s.Bk
-                    o.SkyboxDn = s.Dn
-                    o.SkyboxFt = s.Ft
-                    o.SkyboxLf = s.Lf
-                    o.SkyboxRt = s.Rt
-                    o.SkyboxUp = s.Up
-                    o.SunVisible  = s.SunVisible
-                    o.MoonVisible = s.MoonVisible
-                    o.StarCount   = s.StarCount
-                    o.Parent = Lighting
-                end
+            if myBlackSky then
+                myBlackSky:Destroy()
+                myBlackSky = nil
+            end
+            if saved.skyProps and saved.skyProps.obj then
+                saved.skyProps.obj.Parent = Lighting -- re-attach untouched game sky
             end
         end)
         pcall(function()
@@ -203,7 +191,7 @@ local function main()
             end
         end)
         pcall(function()
-            for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom", "LEGENDS_Sky"}) do
+            for _, n in ipairs({"LEGENDS_CC", "LEGENDS_Blur", "LEGENDS_Bloom"}) do
                 local o = Lighting:FindFirstChild(n)
                 if o then
                     o:Destroy()
@@ -256,18 +244,24 @@ local function main()
     bloom.Parent    = Lighting
 
     -- pitch-black space skybox (100% independent of the game's gray sky)
+    do
+        local orphan = Lighting:FindFirstChild("LEGENDS_Sky")
+        if orphan then
+            orphan:Destroy() -- leftover from an older/failed run
+        end
+    end
     local blackSky = Instance.new("Sky")
-    blackSky.Name        = "LEGENDS_Sky"
-    blackSky.SkyboxBk    = ""
-    blackSky.SkyboxDn    = ""
-    blackSky.SkyboxFt    = ""
-    blackSky.SkyboxLf    = ""
-    blackSky.SkyboxRt    = ""
-    blackSky.SkyboxUp    = ""
-    blackSky.SunVisible  = false
-    blackSky.MoonVisible = false
-    blackSky.StarCount   = 0
-    blackSky.Parent      = Lighting
+    blackSky.Name                 = "LEGENDS_Sky"
+    blackSky.SkyboxBk             = ""
+    blackSky.SkyboxDn             = ""
+    blackSky.SkyboxFt             = ""
+    blackSky.SkyboxLf             = ""
+    blackSky.SkyboxRt             = ""
+    blackSky.SkyboxUp             = ""
+    blackSky.CelestialBodiesShown = false -- hides sun + moon + stars (the only valid Sky toggle)
+    blackSky.StarCount            = 0
+    blackSky.Parent               = Lighting
+    myBlackSky = blackSky
 
     --[[ helpers ]]--
     local HOLE = CONFIG.HOLE_POS
@@ -1006,21 +1000,12 @@ local function main()
             end
         end)
         pcall(function()
-            if saved.skyProps then
-                local s = saved.skyProps
-                local o = s.obj
-                if o then
-                    o.SkyboxBk = s.Bk
-                    o.SkyboxDn = s.Dn
-                    o.SkyboxFt = s.Ft
-                    o.SkyboxLf = s.Lf
-                    o.SkyboxRt = s.Rt
-                    o.SkyboxUp = s.Up
-                    o.SunVisible = s.SunVisible
-                    o.MoonVisible = s.MoonVisible
-                    o.StarCount = s.StarCount
-                    o.Parent = Lighting
-                end
+            if myBlackSky then
+                myBlackSky:Destroy()
+                myBlackSky = nil
+            end
+            if saved.skyProps and saved.skyProps.obj then
+                saved.skyProps.obj.Parent = Lighting -- re-attach untouched game sky
             end
         end)
         pcall(function()
@@ -1037,10 +1022,6 @@ local function main()
             cc:Destroy()
             blur:Destroy()
             bloom:Destroy()
-            local bs = Lighting:FindFirstChild("LEGENDS_Sky")
-            if bs then
-                bs:Destroy()
-            end
         end)
         pcall(function()
             if sceneFolder then
