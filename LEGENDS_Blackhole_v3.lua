@@ -1,6 +1,11 @@
 --=====================================================================
---  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V3.7 (pure-light Gargantua edition)
---  Pure VFX: no character, no fight -- a living black hole.
+--  LEGENDS  |  BLACK HOLE CINEMATIC INTRO  --  V4.0 (REALISM edition)
+--  * crash fix: CFrame.identity() called as a function (line 917) -> CFrame.new()
+--  * disk: 64-chord rings (no polygons) + real Doppler beaming (one side burns
+--    brighter, tracked to the camera every frame -- like Gargantua)
+--  * planets: latitude bands are now vertical beam strips hugging the sphere
+--    (zero poking disks), surface detail = dozens of tiny mottle blobs that
+--    melt together -- no more visible plate shapes
 --  Loader:
 --  loadstring(game:HttpGet("https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/LEGENDS_Intro_VFX_Studio_v2.lua"))()
 --=====================================================================
@@ -21,7 +26,7 @@ local CONFIG = {
     SUCK_EVERY   = 2.8,
 }
 
--- v3.6 palette: real Gargantua look -- white-hot core -> gold -> orange -> burnt outer edge
+-- v4.0 palette: real Gargantua look -- white-hot core -> gold -> orange -> burnt outer edge
 local C_CORE   = Color3.fromRGB(255, 252, 240) -- blazing white-hot (inner edge)
 local C_HOT    = Color3.fromRGB(255, 236, 186) -- pale gold
 local C_EMBER  = Color3.fromRGB(255, 192, 104) -- gold-orange
@@ -368,8 +373,9 @@ local function main()
          zero visible geometry, zero polygon facets, correct from any angle.
          The opaque black core depth-occludes the far side -> a REAL shadow. ]]--
     local ringFX = {} -- animated rings: {beams, base, amp, freq, ph}
-    local function beamRing(centerCF, radius, width, color, tr, spd, bright, nSeg, anim)
-        nSeg = nSeg or 24
+    local dopRings = {} -- Doppler rings: {beams, brBase, dirs[], mids[]} (v4.0)
+    local function beamRing(centerCF, radius, width, color, tr, spd, bright, nSeg, anim, dop)
+        nSeg = nSeg or 64
         local anchor = part({
             Name         = "BH_BeamRing",
             Size         = Vector3.new(0.4, 0.4, 0.4),
@@ -407,6 +413,19 @@ local function main()
         end
         if anim then
             ringFX[#ringFX + 1] = { beams = beams, base = tr, amp = anim[1], freq = anim[2], ph = anim[3] }
+        end
+        if dop then
+            -- precompute each chord's world midpoint + orbital motion direction
+            -- (the disk spins toward +theta; Doppler beaming brightens the side
+            --  whose matter moves TOWARD the camera -- recomputed per frame)
+            local dr = { beams = beams, brBase = bright, dirs = {}, mids = {} }
+            for i = 1, nSeg do
+                local am = ((i - 0.5) / nSeg) * math.pi * 2
+                local lm = Vector3.new(math.cos(am) * radius, 0, math.sin(am) * radius)
+                dr.mids[i] = (centerCF * CFrame.new(lm)).Position
+                dr.dirs[i] = centerCF:VectorToWorldSpace(Vector3.new(-math.sin(am), 0, math.cos(am))).Unit
+            end
+            dopRings[#dopRings + 1] = dr
         end
         return anchor
     end
@@ -456,7 +475,7 @@ local function main()
         Shape        = Enum.PartType.Ball,
         Size         = Vector3.new(64, 64, 64),
         Color        = C_HOT,
-        Transparency = 0.93,
+        Transparency = 0.95,
         CFrame       = CFrame.new(HOLE),
     })
 
@@ -474,30 +493,35 @@ local function main()
     local diskBase0 = CFrame.new(HOLE) * diskTilt
 
     -- face-on group: photon ring + companion bloom + lensed halo
+    -- (v4.0: 64/44 chords -> geometrically perfect circles, no polygon corners)
     local camLook0 = CFrame.lookAt(HOLE, HOLE + Vector3.new(0, 0, -1))
-    local photonA = beamRing(camLook0, 25,   1.3, C_CORE,  0.00, 0.55, 4.0, 26, {0.05, 2.6, 0.0})
-    local photonB = beamRing(camLook0, 27,   2.6, C_HOT,   0.45, 0.38, 2.3, 26, {0.10, 2.6, 0.9})
-    local haloA   = beamRing(camLook0, 31.5, 2.2, C_EMBER, 0.55, 0.26, 1.9, 26, {0.12, 1.9, 1.6})
+    local photonA = beamRing(camLook0, 24.5, 1.5, C_CORE,  0.00, 0.55, 4.2, isTouch and 44 or 64, {0.05, 2.6, 0.0})
+    local photonB = beamRing(camLook0, 26.5, 2.8, C_HOT,   0.45, 0.38, 2.3, isTouch and 44 or 64, {0.10, 2.6, 0.9})
+    local haloA   = beamRing(camLook0, 31.0, 2.2, C_EMBER, 0.55, 0.26, 1.9, isTouch and 44 or 64, {0.12, 1.9, 1.6})
     photonA.Name = "BH_PhotonRing"
     photonB.Name = "BH_PhotonBloom"
     haloA.Name   = "BH_LensHalo"
 
     -- accretion disk: Keplerian striation rings in the tilted disk plane
-    -- (inner = fast + white-hot, outer = slow + burnt; gaps widen outward)
+    -- (inner = fast + white-hot, outer = slow + burnt; the inner edge hugs the
+    --  photon ring like the real thing; last two rings = soft burnt envelope
+    --  so the disk melts into the void instead of ending on a hard rim)
     local diskRings = {
-        { r = 31,  w = 3.4, c = C_CORE,   tr = 0.03, sp = 1.05, br = 3.0 },
-        { r = 37,  w = 2.8, c = C_HOT,    tr = 0.10, sp = 0.84, br = 2.9 },
-        { r = 44,  w = 3.2, c = C_HOT,    tr = 0.15, sp = 0.66, br = 2.8 },
-        { r = 52,  w = 2.6, c = C_EMBER,  tr = 0.24, sp = 0.52, br = 2.6 },
-        { r = 61,  w = 3.4, c = C_EMBER,  tr = 0.29, sp = 0.42, br = 2.5 },
-        { r = 72,  w = 2.6, c = C_PLASMA, tr = 0.40, sp = 0.33, br = 2.2 },
-        { r = 85,  w = 3.6, c = C_PLASMA, tr = 0.45, sp = 0.26, br = 2.0 },
-        { r = 100, w = 2.8, c = C_ROSE,   tr = 0.58, sp = 0.19, br = 1.7 },
-        { r = 118, w = 4.0, c = C_ROSE,   tr = 0.67, sp = 0.14, br = 1.5 },
-        { r = 138, w = 4.6, c = C_ROSE,   tr = 0.78, sp = 0.09, br = 1.2 },
+        { r = 28.5, w = 3.2, c = C_CORE,   tr = 0.02, sp = 1.05, br = 3.2 },
+        { r = 34,   w = 2.6, c = C_CORE,   tr = 0.08, sp = 0.88, br = 3.1 },
+        { r = 40.5, w = 3.0, c = C_HOT,    tr = 0.13, sp = 0.70, br = 3.0 },
+        { r = 48,   w = 2.6, c = C_HOT,    tr = 0.20, sp = 0.55, br = 2.8 },
+        { r = 57,   w = 3.4, c = C_EMBER,  tr = 0.26, sp = 0.44, br = 2.6 },
+        { r = 68,   w = 2.6, c = C_EMBER,  tr = 0.34, sp = 0.36, br = 2.4 },
+        { r = 81,   w = 3.6, c = C_PLASMA, tr = 0.42, sp = 0.29, br = 2.2 },
+        { r = 96,   w = 3.0, c = C_PLASMA, tr = 0.52, sp = 0.22, br = 2.0 },
+        { r = 114,  w = 4.2, c = C_ROSE,   tr = 0.62, sp = 0.16, br = 1.7 },
+        { r = 134,  w = 4.8, c = C_ROSE,   tr = 0.74, sp = 0.11, br = 1.4 },
+        { r = 158,  w = 7.0, c = C_ROSE,   tr = 0.85, sp = 0.07, br = 1.0 },
+        { r = 184,  w = 9.0, c = C_ROSE,   tr = 0.92, sp = 0.05, br = 0.8 },
     }
     for _, dr in ipairs(diskRings) do
-        beamRing(diskBase0, dr.r, dr.w, dr.c, dr.tr, dr.sp, dr.br, dr.r > 90 and 30 or 24)
+        beamRing(diskBase0, dr.r, dr.w, dr.c, dr.tr, dr.sp, dr.br, isTouch and 40 or 64, nil, true)
     end
 
     -- orbiting dust: rotating invisible anchors make particles spawn along sweeping
@@ -721,25 +745,62 @@ local function main()
     local moonP, moonCenter, moonTilt, moonLight
     local spinners = {} -- rotating surface details {cf0, spd, kids={{p, off}}}
 
-    -- latitude belt: a squashed ball that pokes through the globe as a
-    -- weather band around one latitude circle (tilt = planet axial tilt)
-    local function belt(pos, tilt, R, yFrac, poke, thick, color, tr, mat)
-        local cr = math.sqrt(math.max(1 - yFrac * yFrac, 0.02)) * R * poke
-        return part({
-            Name         = "BH_Belt",
-            Shape        = Enum.PartType.Ball,
-            Size         = Vector3.new(cr * 2, thick, cr * 2),
-            Color        = color,
-            Transparency = tr,
-            Material     = mat or Enum.Material.SmoothPlastic,
-            Reflectance  = 0,
-            CFrame       = CFrame.new(pos) * tilt * CFrame.new(0, yFrac * R, 0),
+    --[[ latitude band (v4.0 REALISM): a closed strip of straight beam chords
+         hugging the sphere at one latitude. Each attachment stands VERTICAL
+         (its Y axis = the planet's spin axis), so every chord renders as a
+         vertical ribbon tangent to the surface: from any side view it reads
+         as a weather belt painted ON the globe, and the far half is
+         depth-occluded by the planet itself. Zero poking disks, zero plates,
+         zero silhouette bumps -- the old squashed-ball belts are gone. ]]--
+    local function band(planetCF, R, latDeg, width, color, tr, br, opts)
+        opts = opts or {}
+        local lat   = math.rad(latDeg)
+        local yLat  = math.sin(lat) * R
+        local rc    = math.cos(lat) * R * 1.012
+        local nSeg  = opts.segs or (isTouch and 30 or 44)
+        local anchor = part({
+            Name         = "BH_Band",
+            Size         = Vector3.new(0.4, 0.4, 0.4),
+            Transparency = 1,
+            CFrame       = planetCF,
         })
+        local atts = {}
+        for i = 1, nSeg do
+            local th = (i / nSeg) * math.pi * 2
+            local at = Instance.new("Attachment")
+            at.CFrame = CFrame.Angles(0, th, 0) * CFrame.new(rc, yLat, 0)
+            at.Parent = anchor
+            atts[i] = at
+        end
+        for i = 1, nSeg do
+            local b = Instance.new("Beam")
+            b.Attachment0    = atts[i]
+            b.Attachment1    = atts[(i % nSeg) + 1]
+            b.Width0         = width
+            b.Width1         = width
+            b.Color          = ColorSequence.new(color)
+            b.Transparency   = NumberSequence.new(tr)
+            b.LightEmission  = opts.emit or 0.3  -- bands obey the day light ...
+            b.LightInfluence = opts.inf or 0.7   -- ... so the night side goes dark
+            b.Brightness     = br or 1
+            b.FaceCamera     = false
+            b.Segments       = 1
+            if opts.tex then
+                b.Texture       = opts.tex
+                b.TextureMode   = Enum.TextureMode.Wrap
+                b.TextureLength = (2 * math.pi * rc) / (opts.texRep or 6)
+                b.TextureSpeed  = opts.spd or 0
+            end
+            b.Parent = anchor
+        end
+        return anchor
     end
 
-    -- surface patch: a flattened ellipsoid tangent to the globe (rotates
-    -- with the planet via the spinner system; never sticks out like a wart)
-    local function patch(pos, R, theta, elev, w, h, thick, color, tr, spd, mat)
+    -- surface mottle (v4.0): a TINY flattened ball tangent to the globe
+    -- (5-30 studs on a 116-340 stud planet) -- dozens melt into continents /
+    -- maria / storms with no readable outline. Each planet owns ONE spinner
+    -- carrying all its blobs (a single CFrame chain per planet per frame).
+    local function patch(sp, R, theta, elev, w, h, thick, color, tr, mat)
         local p = part({
             Name         = "BH_Patch",
             Shape        = Enum.PartType.Ball,
@@ -751,8 +812,8 @@ local function main()
         })
         local off = CFrame.Angles(0, theta, 0)
             * CFrame.Angles(elev, 0, 0)
-            * CFrame.new(0, 0, -(R - thick * 0.22))
-        spinners[#spinners + 1] = { cf0 = CFrame.new(pos), spd = spd, kids = { { p = p, off = off } } }
+            * CFrame.new(0, 0, -(R - thick * 0.25))
+        sp.kids[#sp.kids + 1] = { p = p, off = off }
         return p
     end
 
@@ -776,12 +837,19 @@ local function main()
     end
 
     do
-        -- P1: giant ringed world (Saturn/Jupiter hybrid): warm cream globe
-        -- with real latitude belts, a great rust storm, a silky beam-ring
-        -- system with gaps, and a true day/night terminator from its key light
+        --[[ ====== PLANETARY SYSTEM (v4.0 REALISM) ======
+             Every world = one matte globe lit by real PointLights parked on
+             its day side (true day/night terminator) + vertical beam-strip
+             latitude bands hugging the sphere + dozens of tiny tangent
+             mottle blobs that melt together. Nothing pokes out of any
+             silhouette: no plates, no warts, no visible composite shapes. ]]--
+
+        -- P1: giant ringed world (Jupiter warmth + Saturn rings): cream
+        -- globe, banded latitudes, great rust storm, silky ring system
         local p1R    = 170
         local p1Pos  = HOLE + Vector3.new(-0.6, 0.22, 0.76).Unit * 745
         local p1Tilt = CFrame.Angles(math.rad(11), 0, math.rad(-7))
+        local p1CF   = CFrame.new(p1Pos) * p1Tilt
         part({
             Name         = "BH_Planet1",
             Shape        = Enum.PartType.Ball,
@@ -791,18 +859,27 @@ local function main()
             Reflectance  = 0,
             CFrame       = CFrame.new(p1Pos),
         })
-        -- weather belts (latitudes as globe-radius fractions)
-        belt(p1Pos, p1Tilt, p1R,  0.00, 1.030, 0.34 * p1R, Color3.fromRGB(228, 198, 152), 0)
-        belt(p1Pos, p1Tilt, p1R,  0.22, 1.032, 0.22 * p1R, Color3.fromRGB(176, 132, 92),  0)
-        belt(p1Pos, p1Tilt, p1R, -0.20, 1.030, 0.24 * p1R, Color3.fromRGB(214, 178, 132), 0)
-        belt(p1Pos, p1Tilt, p1R,  0.42, 1.034, 0.16 * p1R, Color3.fromRGB(196, 152, 110), 0)
-        belt(p1Pos, p1Tilt, p1R, -0.40, 1.032, 0.18 * p1R, Color3.fromRGB(168, 124, 88),  0)
-        belt(p1Pos, p1Tilt, p1R,  0.60, 1.038, 0.12 * p1R, Color3.fromRGB(222, 190, 146), 0)
-        belt(p1Pos, p1Tilt, p1R, -0.58, 1.036, 0.13 * p1R, Color3.fromRGB(182, 140, 100), 0)
-        belt(p1Pos, p1Tilt, p1R,  0.85, 1.050, 0.12 * p1R, Color3.fromRGB(150, 116, 86),  0)
-        belt(p1Pos, p1Tilt, p1R, -0.85, 1.050, 0.12 * p1R, Color3.fromRGB(150, 116, 86),  0)
-        -- the great storm: one oval rust patch drifting with the spin
-        patch(p1Pos, p1R, 2.1, -0.34, 64, 38, 26, Color3.fromRGB(188, 92, 58), 0, 0.02)
+        local sp1 = { cf0 = p1CF, spd = 0.020, kids = {} }
+        -- weather belts: vertical beam strips tangent to the globe
+        band(p1CF, p1R,   0, 0.085 * p1R, Color3.fromRGB(228, 198, 152), 0.10, 1.2)
+        band(p1CF, p1R,  14, 0.065 * p1R, Color3.fromRGB(176, 132,  92), 0.16, 1.1)
+        band(p1CF, p1R, -12, 0.070 * p1R, Color3.fromRGB(214, 178, 132), 0.14, 1.1)
+        band(p1CF, p1R,  28, 0.050 * p1R, Color3.fromRGB(196, 152, 110), 0.20, 1.0)
+        band(p1CF, p1R, -26, 0.058 * p1R, Color3.fromRGB(168, 124,  88), 0.18, 1.0)
+        band(p1CF, p1R,  44, 0.042 * p1R, Color3.fromRGB(222, 190, 146), 0.24, 0.9)
+        band(p1CF, p1R, -42, 0.048 * p1R, Color3.fromRGB(182, 140, 100), 0.22, 0.9)
+        band(p1CF, p1R,  60, 0.040 * p1R, Color3.fromRGB(206, 172, 132), 0.30, 0.8)
+        band(p1CF, p1R, -58, 0.044 * p1R, Color3.fromRGB(178, 140, 104), 0.28, 0.8)
+        band(p1CF, p1R,  76, 0.050 * p1R, Color3.fromRGB(160, 130, 104), 0.38, 0.7)
+        -- the great rust storm + small ovals: tiny tangent blobs (melt together)
+        patch(sp1, p1R, 2.10, -0.38, 30, 20, 9, Color3.fromRGB(188, 92, 58),  0.10)
+        patch(sp1, p1R, 2.16, -0.38, 18, 11, 7, Color3.fromRGB(214, 120, 76), 0.18)
+        patch(sp1, p1R, 4.40,  0.22, 10,  7, 5, Color3.fromRGB(236, 214, 178), 0.25)
+        patch(sp1, p1R, 5.10,  0.30,  8,  6, 5, Color3.fromRGB(236, 214, 178), 0.30)
+        patch(sp1, p1R, 0.90,  0.12,  9,  6, 5, Color3.fromRGB(240, 220, 186), 0.30)
+        patch(sp1, p1R, 3.60, -0.10, 11,  7, 5, Color3.fromRGB(150, 110, 80),  0.30)
+        patch(sp1, p1R, 1.60,  0.42, 10,  7, 5, Color3.fromRGB(150, 112, 82),  0.32)
+        spinners[#spinners + 1] = sp1
         -- faint rim glow so the night limb stays readable
         part({
             Name         = "BH_Planet1Shell",
@@ -813,12 +890,12 @@ local function main()
             CFrame       = CFrame.new(p1Pos),
         })
         -- ring system: silky beam rings with real gaps between them
-        local ringCF = CFrame.new(p1Pos) * p1Tilt * CFrame.Angles(math.rad(18), 0, math.rad(6))
-        beamRing(ringCF, 210, 2.2, Color3.fromRGB(226, 202, 164), 0.30, 0.060, 1.4, 30)
-        beamRing(ringCF, 226, 3.0, Color3.fromRGB(236, 212, 172), 0.18, 0.050, 1.6, 30)
-        beamRing(ringCF, 244, 1.6, Color3.fromRGB(214, 188, 148), 0.58, 0.045, 1.1, 30) -- Cassini gap
-        beamRing(ringCF, 260, 3.4, Color3.fromRGB(232, 206, 166), 0.24, 0.040, 1.5, 30)
-        beamRing(ringCF, 272, 1.8, Color3.fromRGB(206, 180, 140), 0.64, 0.030, 1.0, 30)
+        local ringCF = p1CF * CFrame.Angles(math.rad(18), 0, math.rad(6))
+        beamRing(ringCF, 210, 2.2, Color3.fromRGB(226, 202, 164), 0.30, 0.060, 1.4, isTouch and 32 or 48)
+        beamRing(ringCF, 226, 3.0, Color3.fromRGB(236, 212, 172), 0.18, 0.050, 1.6, isTouch and 32 or 48)
+        beamRing(ringCF, 244, 1.6, Color3.fromRGB(214, 188, 148), 0.58, 0.045, 1.1, isTouch and 32 or 48) -- Cassini gap
+        beamRing(ringCF, 260, 3.4, Color3.fromRGB(232, 206, 166), 0.24, 0.040, 1.5, isTouch and 32 or 48)
+        beamRing(ringCF, 272, 1.8, Color3.fromRGB(206, 180, 140), 0.64, 0.030, 1.0, isTouch and 32 or 48)
         -- shimmering dust riding the main band (8 orbiting emitters)
         do
             local kids = {}
@@ -855,11 +932,12 @@ local function main()
         dayLight(p1Pos, p1R, Color3.fromRGB(255, 214, 160), 2.2, 4)
         dayLight(p1Pos, p1R, Color3.fromRGB(255, 214, 160), 0.7, 44)
 
-        -- P2: ice giant (cold azure, far side): subtle methane belts, a deep
+        -- P2: ice giant (cold azure, far side): subtle methane bands, a deep
         -- storm eye, thick glowing atmosphere shell, own day light
         local p2R   = 130
         local p2Pos = HOLE + Vector3.new(0.55, -0.18, 0.62).Unit * 820
         local p2Tilt = CFrame.Angles(math.rad(-8), 0, math.rad(10))
+        local p2CF  = CFrame.new(p2Pos) * p2Tilt
         part({
             Name         = "BH_Planet2",
             Shape        = Enum.PartType.Ball,
@@ -869,10 +947,17 @@ local function main()
             Reflectance  = 0,
             CFrame       = CFrame.new(p2Pos),
         })
-        belt(p2Pos, p2Tilt, p2R,  0.00, 1.024, 0.30 * p2R, Color3.fromRGB(88, 128, 198), 0)
-        belt(p2Pos, p2Tilt, p2R,  0.35, 1.028, 0.18 * p2R, Color3.fromRGB(104, 146, 214), 0)
-        belt(p2Pos, p2Tilt, p2R, -0.30, 1.026, 0.20 * p2R, Color3.fromRGB(74, 112, 186),  0)
-        patch(p2Pos, p2R, 4.4, 0.28, 44, 28, 18, Color3.fromRGB(46, 82, 148), 0, 0.03)
+        band(p2CF, p2R,   0, 0.070 * p2R, Color3.fromRGB(88, 128, 198),  0.16, 1.0)
+        band(p2CF, p2R,  20, 0.050 * p2R, Color3.fromRGB(104, 146, 214), 0.24, 0.9)
+        band(p2CF, p2R, -20, 0.054 * p2R, Color3.fromRGB(74, 112, 186),  0.22, 0.9)
+        band(p2CF, p2R,  38, 0.042 * p2R, Color3.fromRGB(96, 138, 206),  0.30, 0.8)
+        band(p2CF, p2R, -38, 0.046 * p2R, Color3.fromRGB(70, 108, 182),  0.28, 0.8)
+        band(p2CF, p2R,  58, 0.044 * p2R, Color3.fromRGB(86, 124, 194),  0.36, 0.7)
+        local sp2 = { cf0 = p2CF, spd = 0.030, kids = {} }
+        patch(sp2, p2R, 4.4, 0.28, 14,  9, 5, Color3.fromRGB(46, 82, 148),  0.14)
+        patch(sp2, p2R, 1.2, -0.15, 10,  7, 5, Color3.fromRGB(58, 94, 162), 0.20)
+        patch(sp2, p2R, 2.8,  0.44,  8,  6, 4, Color3.fromRGB(52, 88, 156), 0.24)
+        spinners[#spinners + 1] = sp2
         part({ -- methane glow limb
             Name         = "BH_Planet2Shell",
             Shape        = Enum.PartType.Ball,
@@ -890,14 +975,16 @@ local function main()
             CFrame       = CFrame.new(p2Pos),
         })
         beamRing(CFrame.new(p2Pos) * p2Tilt * CFrame.Angles(math.rad(-72), 0, math.rad(22)),
-            176, 1.4, Color3.fromRGB(150, 190, 250), 0.74, 0.030, 1.0, 28)
+            176, 1.4, Color3.fromRGB(150, 190, 250), 0.74, 0.030, 1.0, isTouch and 30 or 44)
         dayLight(p2Pos, p2R, Color3.fromRGB(200, 220, 255), 2.0, 4)
         dayLight(p2Pos, p2R, Color3.fromRGB(200, 220, 255), 0.6, 36)
 
         -- P3: red rock world (Mars-like): dark maria + bright highlands as
-        -- tangent patches, white polar caps, thin dusty glow, gray moon
+        -- dozens of tiny mottle blobs, white polar caps as tight band stacks,
+        -- thin dusty glow, orbiting gray moon
         local p3R   = 92
         local p3Pos = HOLE + Vector3.new(0.2, 0.35, -0.85).Unit * 690
+        local p3CF  = CFrame.new(p3Pos)
         part({
             Name         = "BH_Planet3",
             Shape        = Enum.PartType.Ball,
@@ -907,15 +994,35 @@ local function main()
             Reflectance  = 0,
             CFrame       = CFrame.new(p3Pos),
         })
-        patch(p3Pos, p3R, 0.8,  0.10, 38, 26, 14, Color3.fromRGB(118, 58, 34),  0.30, 0.045)
-        patch(p3Pos, p3R, 2.4, -0.22, 30, 22, 12, Color3.fromRGB(118, 58, 34),  0.35, 0.045)
-        patch(p3Pos, p3R, 4.0,  0.30, 26, 20, 11, Color3.fromRGB(110, 54, 32),  0.38, 0.045)
-        patch(p3Pos, p3R, 5.3, -0.05, 34, 24, 13, Color3.fromRGB(124, 62, 36),  0.32, 0.045)
-        patch(p3Pos, p3R, 1.6, -0.38, 24, 18, 10, Color3.fromRGB(118, 58, 34),  0.40, 0.045)
-        patch(p3Pos, p3R, 3.2,  0.20, 28, 20, 11, Color3.fromRGB(218, 160, 108), 0.35, 0.045)
-        patch(p3Pos, p3R, 5.9, -0.28, 24, 18, 10, Color3.fromRGB(214, 152, 100), 0.38, 0.045)
-        belt(p3Pos, CFrame.identity(), p3R,  0.88, 1.060, 0.10 * p3R, Color3.fromRGB(240, 244, 250), 0.12)
-        belt(p3Pos, CFrame.identity(), p3R, -0.88, 1.060, 0.10 * p3R, Color3.fromRGB(240, 244, 250), 0.12)
+        local sp3 = { cf0 = p3CF, spd = 0.045, kids = {} }
+        -- dark maria (small tangent blobs that melt into mottling)
+        patch(sp3, p3R, 0.8,  0.10, 11,  8, 5, Color3.fromRGB(118, 58, 34), 0.28)
+        patch(sp3, p3R, 2.4, -0.22, 10,  7, 5, Color3.fromRGB(118, 58, 34), 0.32)
+        patch(sp3, p3R, 4.0,  0.30,  9,  6, 4, Color3.fromRGB(110, 54, 32), 0.34)
+        patch(sp3, p3R, 5.3, -0.05, 11,  8, 5, Color3.fromRGB(124, 62, 36), 0.30)
+        patch(sp3, p3R, 1.6, -0.38,  8,  6, 4, Color3.fromRGB(118, 58, 34), 0.36)
+        patch(sp3, p3R, 3.2,  0.20,  9,  6, 4, Color3.fromRGB(114, 56, 34), 0.34)
+        patch(sp3, p3R, 5.9, -0.28,  8,  6, 4, Color3.fromRGB(118, 58, 34), 0.36)
+        patch(sp3, p3R, 4.7, -0.44,  7,  5, 4, Color3.fromRGB(110, 54, 32), 0.38)
+        patch(sp3, p3R, 2.0,  0.48,  7,  5, 4, Color3.fromRGB(118, 58, 34), 0.40)
+        patch(sp3, p3R, 0.3, -0.52,  7,  5, 4, Color3.fromRGB(114, 56, 34), 0.40)
+        patch(sp3, p3R, 5.6,  0.14,  8,  6, 4, Color3.fromRGB(120, 60, 36), 0.36)
+        patch(sp3, p3R, 1.1,  0.30,  7,  5, 4, Color3.fromRGB(118, 58, 34), 0.38)
+        -- bright highlands + a canyon slash
+        patch(sp3, p3R, 3.2,  0.20,  9,  6, 4, Color3.fromRGB(218, 160, 108), 0.30)
+        patch(sp3, p3R, 5.9, -0.28,  8,  6, 4, Color3.fromRGB(214, 152, 100), 0.32)
+        patch(sp3, p3R, 0.6, -0.12,  9,  5, 4, Color3.fromRGB(222, 166, 116), 0.30)
+        patch(sp3, p3R, 2.8,  0.40,  7,  5, 4, Color3.fromRGB(216, 158, 108), 0.34)
+        patch(sp3, p3R, 4.2, -0.34,  8,  5, 4, Color3.fromRGB(220, 162, 112), 0.34)
+        patch(sp3, p3R, 1.9,  0.02, 10,  4, 4, Color3.fromRGB(150, 82, 48),  0.30) -- Valles-like slash
+        spinners[#spinners + 1] = sp3
+        -- polar caps: tight stacks of thin white bands around each pole
+        band(p3CF, p3R,  84, 0.055 * p3R, Color3.fromRGB(244, 248, 252), 0.14, 1.1)
+        band(p3CF, p3R,  78, 0.062 * p3R, Color3.fromRGB(240, 244, 250), 0.22, 1.0)
+        band(p3CF, p3R,  70, 0.050 * p3R, Color3.fromRGB(238, 242, 248), 0.38, 0.9)
+        band(p3CF, p3R, -84, 0.055 * p3R, Color3.fromRGB(244, 248, 252), 0.14, 1.1)
+        band(p3CF, p3R, -78, 0.062 * p3R, Color3.fromRGB(240, 244, 250), 0.22, 1.0)
+        band(p3CF, p3R, -70, 0.050 * p3R, Color3.fromRGB(238, 242, 248), 0.38, 0.9)
         part({ -- thin dusty atmosphere
             Name         = "BH_Planet3Shell",
             Shape        = Enum.PartType.Ball,
@@ -952,9 +1059,11 @@ local function main()
         moonTilt   = CFrame.Angles(math.rad(24), 0, math.rad(10))
 
         -- P4: molten world near the hole: matte charcoal crust, GLOWING lava
-        -- belts (Neon), white-hot volcano patches, ember haze, strong key light
+        -- bands (lava is self-luminous, so these strips stay emissive on the
+        -- night side), white-hot volcano blobs, ember haze, strong key light
         local p4R   = 64
         local p4Pos = HOLE + Vector3.new(-0.35, 0.4, -0.55).Unit * 430
+        local p4CF  = CFrame.new(p4Pos)
         part({
             Name         = "BH_Planet4",
             Shape        = Enum.PartType.Ball,
@@ -964,12 +1073,19 @@ local function main()
             Reflectance  = 0,
             CFrame       = CFrame.new(p4Pos),
         })
-        belt(p4Pos, CFrame.identity(), p4R,  0.00, 1.035, 0.26 * p4R, Color3.fromRGB(255, 140, 40), 0.10, Enum.Material.Neon)
-        belt(p4Pos, CFrame.identity(), p4R,  0.38, 1.040, 0.12 * p4R, Color3.fromRGB(255, 90, 20),  0.30, Enum.Material.Neon)
-        belt(p4Pos, CFrame.identity(), p4R, -0.34, 1.040, 0.14 * p4R, Color3.fromRGB(255, 120, 30), 0.22, Enum.Material.Neon)
-        patch(p4Pos, p4R, 1.1,  0.15, 22, 14, 10, Color3.fromRGB(255, 180, 70), 0.05, 0.03, Enum.Material.Neon)
-        patch(p4Pos, p4R, 3.7, -0.25, 18, 12, 9,  Color3.fromRGB(255, 160, 60), 0.08, 0.03, Enum.Material.Neon)
-        patch(p4Pos, p4R, 5.2,  0.40, 16, 11, 8,  Color3.fromRGB(255, 150, 50), 0.10, 0.03, Enum.Material.Neon)
+        band(p4CF, p4R,  0, 0.090 * p4R, Color3.fromRGB(255, 140, 40), 0.08, 1.6, { emit = 0.85, inf = 0.15 })
+        band(p4CF, p4R, 22, 0.048 * p4R, Color3.fromRGB(255, 90, 20),  0.22, 1.3, { emit = 0.85, inf = 0.15 })
+        band(p4CF, p4R, -20, 0.052 * p4R, Color3.fromRGB(255, 120, 30), 0.18, 1.3, { emit = 0.85, inf = 0.15 })
+        band(p4CF, p4R, 40, 0.036 * p4R, Color3.fromRGB(255, 105, 25), 0.32, 1.1, { emit = 0.85, inf = 0.15 })
+        local sp4 = { cf0 = p4CF, spd = 0.030, kids = {} }
+        patch(sp4, p4R, 1.1,  0.15,  8,  6, 4, Color3.fromRGB(255, 180, 70), 0.05, Enum.Material.Neon)
+        patch(sp4, p4R, 3.7, -0.25,  7,  5, 4, Color3.fromRGB(255, 160, 60), 0.08, Enum.Material.Neon)
+        patch(sp4, p4R, 5.2,  0.40,  6,  4, 3, Color3.fromRGB(255, 150, 50), 0.10, Enum.Material.Neon)
+        patch(sp4, p4R, 0.4, -0.35,  6,  4, 3, Color3.fromRGB(255, 170, 65), 0.08, Enum.Material.Neon)
+        patch(sp4, p4R, 2.5,  0.05,  7,  5, 4, Color3.fromRGB(255, 155, 55), 0.08, Enum.Material.Neon)
+        patch(sp4, p4R, 4.4,  0.28,  5,  4, 3, Color3.fromRGB(255, 145, 45), 0.12, Enum.Material.Neon)
+        patch(sp4, p4R, 5.8, -0.10,  6,  4, 3, Color3.fromRGB(255, 165, 60), 0.10, Enum.Material.Neon)
+        spinners[#spinners + 1] = sp4
         part({ -- ember haze
             Name         = "BH_Planet4Shell",
             Shape        = Enum.PartType.Ball,
@@ -981,10 +1097,12 @@ local function main()
         dayLight(p4Pos, p4R, Color3.fromRGB(255, 160, 90), 2.4, 4)
 
         -- P5: ocean paradise: deep-blue marble, green continents + sandy
-        -- shores as tangent patches, white cloud bands, sky-blue atmosphere
+        -- shores as melted mottle clusters, drifting white cloud strips,
+        -- sky-blue atmosphere
         local p5R   = 104
         local p5Pos = HOLE + Vector3.new(0.88, -0.02, 0.42).Unit * 640
         local p5Tilt = CFrame.Angles(math.rad(9), 0, math.rad(-5))
+        local p5CF  = CFrame.new(p5Pos) * p5Tilt
         part({
             Name         = "BH_Planet5",
             Shape        = Enum.PartType.Ball,
@@ -994,16 +1112,37 @@ local function main()
             Reflectance  = 0,
             CFrame       = CFrame.new(p5Pos),
         })
-        patch(p5Pos, p5R, 0.6,  0.12, 46, 30, 16, Color3.fromRGB(66, 128, 80),  0.05, 0.04)
-        patch(p5Pos, p5R, 2.2, -0.25, 36, 26, 14, Color3.fromRGB(74, 138, 84),  0.06, 0.04)
-        patch(p5Pos, p5R, 4.1,  0.34, 28, 20, 12, Color3.fromRGB(60, 118, 74),  0.08, 0.04)
-        patch(p5Pos, p5R, 5.5, -0.08, 40, 28, 15, Color3.fromRGB(70, 132, 82),  0.06, 0.04)
-        patch(p5Pos, p5R, 3.3,  0.45, 20, 14, 10, Color3.fromRGB(66, 124, 78),  0.10, 0.04)
-        patch(p5Pos, p5R, 1.4, -0.40, 24, 16, 10, Color3.fromRGB(188, 164, 116), 0.20, 0.04)
-        patch(p5Pos, p5R, 4.8,  0.02, 22, 15, 10, Color3.fromRGB(192, 168, 120), 0.22, 0.04)
-        belt(p5Pos, p5Tilt, p5R,  0.00, 1.022, 0.10 * p5R, Color3.fromRGB(245, 248, 252), 0.40)
-        belt(p5Pos, p5Tilt, p5R,  0.30, 1.026, 0.08 * p5R, Color3.fromRGB(240, 244, 250), 0.48)
-        belt(p5Pos, p5Tilt, p5R, -0.32, 1.026, 0.09 * p5R, Color3.fromRGB(240, 244, 250), 0.46)
+        local sp5 = { cf0 = p5CF, spd = 0.040, kids = {} }
+        -- continent clusters: 2-4 overlapping blobs each, no hard outlines
+        patch(sp5, p5R, 0.6,  0.12, 15, 11, 7, Color3.fromRGB(66, 128, 80),  0.06)
+        patch(sp5, p5R, 0.9,  0.16, 11,  8, 6, Color3.fromRGB(74, 138, 84),  0.08)
+        patch(sp5, p5R, 0.4,  0.06,  9,  7, 5, Color3.fromRGB(60, 118, 74),  0.10)
+        patch(sp5, p5R, 2.2, -0.25, 13,  9, 6, Color3.fromRGB(74, 138, 84),  0.07)
+        patch(sp5, p5R, 2.5, -0.30,  9,  7, 5, Color3.fromRGB(66, 128, 80),  0.10)
+        patch(sp5, p5R, 4.1,  0.34, 10,  8, 5, Color3.fromRGB(60, 118, 74),  0.10)
+        patch(sp5, p5R, 4.4,  0.28,  8,  6, 5, Color3.fromRGB(70, 132, 82),  0.12)
+        patch(sp5, p5R, 5.5, -0.08, 14, 10, 6, Color3.fromRGB(70, 132, 82),  0.07)
+        patch(sp5, p5R, 5.8, -0.14, 10,  7, 5, Color3.fromRGB(62, 120, 76),  0.10)
+        patch(sp5, p5R, 3.3,  0.45,  8,  6, 5, Color3.fromRGB(66, 124, 78),  0.12)
+        patch(sp5, p5R, 3.0,  0.40,  7,  5, 4, Color3.fromRGB(74, 138, 84),  0.14)
+        -- sandy shores + a small archipelago
+        patch(sp5, p5R, 1.4, -0.40,  9,  7, 5, Color3.fromRGB(188, 164, 116), 0.20)
+        patch(sp5, p5R, 4.8,  0.02,  8,  6, 5, Color3.fromRGB(192, 168, 120), 0.22)
+        patch(sp5, p5R, 1.7, -0.44,  6,  4, 4, Color3.fromRGB(196, 172, 124), 0.24)
+        patch(sp5, p5R, 2.6,  0.02,  5,  4, 4, Color3.fromRGB(190, 166, 118), 0.26)
+        patch(sp5, p5R, 0.2,  0.36,  6,  4, 4, Color3.fromRGB(186, 162, 114), 0.26)
+        spinners[#spinners + 1] = sp5
+        -- cloud strips: soft smoke texture, drifting slowly with the spin
+        band(p5CF, p5R,   0, 0.060 * p5R, Color3.fromRGB(245, 248, 252), 0.34, 0.9,
+            { tex = "rbxasset://textures/particles/smoke_main.dds", texRep = 8, spd = 0.030 })
+        band(p5CF, p5R,  18, 0.046 * p5R, Color3.fromRGB(240, 244, 250), 0.42, 0.8,
+            { tex = "rbxasset://textures/particles/smoke_main.dds", texRep = 8, spd = 0.022 })
+        band(p5CF, p5R, -20, 0.050 * p5R, Color3.fromRGB(240, 244, 250), 0.40, 0.8,
+            { tex = "rbxasset://textures/particles/smoke_main.dds", texRep = 8, spd = -0.026 })
+        band(p5CF, p5R,  40, 0.040 * p5R, Color3.fromRGB(238, 242, 248), 0.48, 0.7,
+            { tex = "rbxasset://textures/particles/smoke_main.dds", texRep = 8, spd = 0.016 })
+        band(p5CF, p5R, -42, 0.044 * p5R, Color3.fromRGB(238, 242, 248), 0.46, 0.7,
+            { tex = "rbxasset://textures/particles/smoke_main.dds", texRep = 8, spd = -0.018 })
         part({ -- sky-blue atmosphere limb
             Name         = "BH_Planet5Shell",
             Shape        = Enum.PartType.Ball,
@@ -1023,9 +1162,10 @@ local function main()
         dayLight(p5Pos, p5R, Color3.fromRGB(235, 240, 255), 2.0, 4)
         dayLight(p5Pos, p5R, Color3.fromRGB(235, 240, 255), 0.6, 38)
 
-        -- P6: pale ice dwarf: arctic globe, frost belts, cold blue glow
+        -- P6: pale ice dwarf: arctic globe, frost bands, cold blue glow
         local p6R   = 58
         local p6Pos = HOLE + Vector3.new(-0.75, -0.25, -0.45).Unit * 900
+        local p6CF  = CFrame.new(p6Pos)
         part({
             Name         = "BH_Planet6",
             Shape        = Enum.PartType.Ball,
@@ -1035,9 +1175,15 @@ local function main()
             Reflectance  = 0,
             CFrame       = CFrame.new(p6Pos),
         })
-        belt(p6Pos, CFrame.identity(), p6R,  0.00, 1.022, 0.28 * p6R, Color3.fromRGB(206, 222, 238), 0.06)
-        belt(p6Pos, CFrame.identity(), p6R,  0.42, 1.028, 0.14 * p6R, Color3.fromRGB(172, 194, 216), 0.10)
-        belt(p6Pos, CFrame.identity(), p6R, -0.40, 1.028, 0.15 * p6R, Color3.fromRGB(166, 190, 214), 0.10)
+        band(p6CF, p6R,   0, 0.075 * p6R, Color3.fromRGB(206, 222, 238), 0.12, 1.0)
+        band(p6CF, p6R,  30, 0.050 * p6R, Color3.fromRGB(172, 194, 216), 0.20, 0.9)
+        band(p6CF, p6R, -30, 0.054 * p6R, Color3.fromRGB(166, 190, 214), 0.18, 0.9)
+        band(p6CF, p6R,  54, 0.042 * p6R, Color3.fromRGB(196, 214, 232), 0.28, 0.8)
+        local sp6 = { cf0 = p6CF, spd = 0.020, kids = {} }
+        patch(sp6, p6R, 1.8,  0.18,  7,  5, 4, Color3.fromRGB(158, 180, 202), 0.24)
+        patch(sp6, p6R, 4.3, -0.30,  6,  4, 3, Color3.fromRGB(164, 186, 208), 0.26)
+        patch(sp6, p6R, 3.0,  0.42,  5,  4, 3, Color3.fromRGB(214, 228, 242), 0.22)
+        spinners[#spinners + 1] = sp6
         part({
             Name         = "BH_Planet6Shell",
             Shape        = Enum.PartType.Ball,
@@ -1134,6 +1280,21 @@ local function main()
             local seq = NumberSequence.new(k) -- ONE alloc per ring, not per beam (REV-A/C)
             for _, b in ipairs(fx.beams) do
                 b.Transparency = seq
+            end
+        end
+        -- Doppler beaming (v4.0): the side of the disk moving TOWARD the camera
+        -- burns brighter -- the signature Gargantua asymmetry, tracked live as
+        -- the camera orbits (relativistic beaming, no per-frame allocations)
+        if camFx and #dopRings > 0 then
+            local cp = camFx.CFrame.Position
+            for _, dr in ipairs(dopRings) do
+                for i = 1, #dr.beams do
+                    local toCam = cp - dr.mids[i]
+                    if toCam.Magnitude > 1 then
+                        local d = dr.dirs[i]:Dot(toCam.Unit)
+                        dr.beams[i].Brightness = dr.brBase * (1 + 0.42 * d)
+                    end
+                end
             end
         end
     end
@@ -1785,9 +1946,9 @@ local function main()
         bloom.Intensity = math.min(1.55 + 0.35 * math.sin(t * 1.3) + shockPulse * 0.7 + glowPulse * 0.35, bloomCap)
 
         glow.Size         = Vector3.new(1, 1, 1) * (64 + glowPulse * 9)
-        glow.Transparency = 0.93 - glowPulse * 0.05
+        glow.Transparency = 0.95 - glowPulse * 0.04 -- v4.0: softer halo, bloom does the work
         plight.Brightness = 2.4 + glowPulse * 1.8
-        core.Size         = Vector3.new(1, 1, 1) * (44 + 1.4 * math.sin(t * 2.6) + math.min(glowPulse, 0.6) * 1.8) -- capped: never swallow the photon ring (REV-B)
+        core.Size         = Vector3.new(1, 1, 1) * (44 + 1.0 * math.sin(t * 2.6) + math.min(glowPulse, 0.5) * 1.2) -- capped: photon ring hugs at 24.5, never swallowed (REV-B/v4.0)
 
         local camNow = workspace.CurrentCamera
         if camNow then
