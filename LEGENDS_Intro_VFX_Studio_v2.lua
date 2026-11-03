@@ -15,15 +15,17 @@ local Debris       = game:GetService("Debris")
 local CONFIG = {
     DURATION     = 58,
     HOLE_POS     = Vector3.new(0, 5000, 0), -- far above the map: beyond streaming range, nothing of the world exists near here
-    STAR_COUNT   = 170,
+    STAR_COUNT   = 220,
     DEBRIS_COUNT = 44,
     SHOCK_TIMES  = {13, 20, 27, 34, 41, 47},
     SUCK_EVERY   = 2.8,
 }
 
+local C_CORE   = Color3.fromRGB(240, 248, 255) -- blue-white inner edge
 local C_HOT    = Color3.fromRGB(255, 244, 224)
 local C_EMBER  = Color3.fromRGB(255, 184, 96)
-local C_PLASMA = Color3.fromRGB(198, 94, 42)
+local C_PLASMA = Color3.fromRGB(224, 108, 40)  -- vivid fire
+local C_ROSE   = Color3.fromRGB(150, 42, 26)   -- deep-red outer fade
 local C_STAR   = Color3.fromRGB(214, 226, 255)
 local C_ICE    = Color3.fromRGB(170, 190, 255)
 
@@ -345,6 +347,7 @@ local function main()
             NumberSequenceKeypoint.new(1, 1),
         })
         tr.Parent = p
+        return tr
     end
 
     --[[ space enclosure -- 6 REAL walls forming a hollow black box.
@@ -408,9 +411,9 @@ local function main()
         for i = 1, PHOTON_N do
             photonSegs[i] = part({
                 Name         = "BH_Photon",
-                Size         = Vector3.new(0.5, 0.28, spacing * 1.5),
-                Color        = C_HOT,
-                Transparency = 0.02,
+                Size         = Vector3.new(0.45, 0.22, spacing * 1.5),
+                Color        = C_CORE,
+                Transparency = 0.0,
                 CFrame       = CFrame.new(HOLE),
             })
         end
@@ -436,15 +439,16 @@ local function main()
     -- accretion disk: overlapping bands that fuse into ONE solid glowing disk
     -- (segment length > arc spacing => continuous ring, never dotted)
     local rings = {
-        {r = 14,   speed = 1.60, color = C_HOT,    sx = 4.0, sy = 0.35, base = 0.05},
-        {r = 18.5, speed = 1.25, color = C_HOT,    sx = 4.5, sy = 0.50, base = 0.10},
-        {r = 24,   speed = 0.95, color = C_EMBER,  sx = 5.5, sy = 0.60, base = 0.16},
-        {r = 30.5, speed = 0.70, color = C_EMBER,  sx = 6.5, sy = 0.70, base = 0.24},
-        {r = 38.5, speed = 0.50, color = C_PLASMA, sx = 7.5, sy = 0.80, base = 0.34},
-        {r = 47,   speed = 0.34, color = C_PLASMA, sx = 9.0, sy = 0.90, base = 0.46},
+        {r = 13.5, speed = 1.65, color = C_CORE,   sx = 3.6, sy = 0.30, base = 0.03},
+        {r = 17.5, speed = 1.30, color = C_HOT,    sx = 4.4, sy = 0.48, base = 0.08},
+        {r = 23,   speed = 0.98, color = C_EMBER,  sx = 5.5, sy = 0.60, base = 0.15},
+        {r = 29.5, speed = 0.72, color = C_EMBER,  sx = 6.5, sy = 0.70, base = 0.22},
+        {r = 37.5, speed = 0.52, color = C_PLASMA, sx = 7.5, sy = 0.82, base = 0.32},
+        {r = 46,   speed = 0.36, color = C_PLASMA, sx = 8.5, sy = 0.95, base = 0.44},
+        {r = 56,   speed = 0.22, color = C_ROSE,   sx = 10,  sy = 1.15, base = 0.62},
     }
     local diskSegs = {}
-    local bandGap = isTouch and 9.5 or 7
+    local bandGap = isTouch and 11 or 7
     for ri, ring in ipairs(rings) do
         local n       = math.max(10, math.ceil((2 * math.pi * ring.r) / bandGap))
         local spacing = (2 * math.pi * ring.r) / n
@@ -526,15 +530,22 @@ local function main()
 
     -- starfield
     local stars = {}
-    local starN = isTouch and 120 or CONFIG.STAR_COUNT
+    local starN = isTouch and 150 or CONFIG.STAR_COUNT
+    local starPalette = {
+        Color3.fromRGB(214, 226, 255), -- blue-white
+        Color3.fromRGB(255, 244, 230), -- warm white
+        Color3.fromRGB(255, 214, 170), -- amber
+        Color3.fromRGB(190, 235, 255), -- pale cyan
+    }
     for i = 1, starN do
-        local dist = 260 + math.random() * 560
-        local pos  = HOLE + randomUnit() * dist
+        local giant = (i <= 8)
+        local dist  = 260 + math.random() * 560
+        local pos   = HOLE + randomUnit() * dist
         local s = part({
             Name         = "BH_Star",
-            Size         = Vector3.new(1, 1, 1) * (0.7 + math.random() * 1.2),
-            Color        = C_STAR,
-            Transparency = 0.05 + math.random() * 0.35,
+            Size         = Vector3.new(1, 1, 1) * (giant and (2.3 + math.random() * 0.9) or (0.7 + math.random() * 1.2)),
+            Color        = giant and Color3.fromRGB(255, 250, 240) or starPalette[math.random(#starPalette)],
+            Transparency = giant and 0.02 or (0.05 + math.random() * 0.35),
             CFrame       = CFrame.new(pos),
         })
         stars[i] = {
@@ -543,19 +554,20 @@ local function main()
         }
     end
 
-    -- twinkling stars subset (unique stars, shuffled)
+    -- twinkling stars subset (unique stars, shuffled; giants 1..8 keep fixed brightness)
     local twinkle = {}
     local tidx = {}
-    for i = 1, #stars do
-        tidx[i] = i
+    for i = 9, #stars do
+        tidx[#tidx + 1] = i
     end
     for i = #tidx, 2, -1 do
         local j = math.random(i)
         tidx[i], tidx[j] = tidx[j], tidx[i]
     end
-    for i = 1, math.min(isTouch and 24 or 50, #tidx) do
+    for i = 1, math.min(isTouch and 30 or 70, #tidx) do
         twinkle[i] = {
             part  = stars[tidx[i]].part,
+            star  = stars[tidx[i]],
             phase = math.random() * math.pi * 2,
         }
     end
@@ -566,15 +578,17 @@ local function main()
         Color3.fromRGB(44, 74, 158),
         Color3.fromRGB(138, 42, 118),
         Color3.fromRGB(30, 96, 138),
+        Color3.fromRGB(28, 120, 138),
+        Color3.fromRGB(150, 112, 64),
     }
-    for i = 1, 8 do
+    for i = 1, 12 do
         local dir = randomUnit()
         dir = Vector3.new(dir.X, math.abs(dir.Y) * 0.6 + 0.05, dir.Z)
         if dir.Magnitude < 0.05 then
             dir = Vector3.new(1, 0.2, 0)
         end
         dir = dir.Unit
-        local dist = 420 + math.random() * 380
+        local dist = 700 + math.random() * 100
         part({
             Name         = "BH_Nebula",
             Shape        = Enum.PartType.Ball,
@@ -583,6 +597,36 @@ local function main()
             Transparency = 0.955,
             CFrame       = CFrame.new(HOLE + dir * dist),
         })
+    end
+
+    -- ringed gas planet far in the void (opposite side from the galaxy swirl)
+    do
+        local planetPos = HOLE + Vector3.new(-0.6, 0.22, 0.76).Unit * 720
+        part({
+            Name         = "BH_Planet",
+            Shape        = Enum.PartType.Ball,
+            Size         = Vector3.new(64, 64, 64),
+            Color        = Color3.fromRGB(98, 84, 72),
+            Transparency = 0.05,
+            CFrame       = CFrame.new(planetPos),
+        })
+        local ringTilt = CFrame.Angles(math.rad(74), 0, math.rad(18))
+        for ri, pr in ipairs({ 96, 118 }) do
+            local nseg = isTouch and 16 or 26
+            local spacing = (2 * math.pi * pr) / nseg
+            for i = 1, nseg do
+                local a = (i / nseg) * math.pi * 2
+                part({
+                    Name         = "BH_PlanetRing",
+                    Size         = Vector3.new(3.2, 0.8, spacing * 1.3),
+                    Color        = Color3.fromRGB(214, 186, 150),
+                    Transparency = (ri == 1) and 0.66 or 0.78,
+                    CFrame       = CFrame.new(planetPos) * ringTilt
+                        * CFrame.Angles(0, a, 0)
+                        * CFrame.new(pr, 0, 0),
+                })
+            end
+        end
     end
 
     -- distant galaxy swirl
@@ -599,6 +643,29 @@ local function main()
             Transparency = 0.1 + math.random() * 0.4,
             CFrame       = galaxyCF * CFrame.Angles(0, a, 0) * CFrame.new(rr, y, 0),
         })
+    end
+
+    -- shooting comets crossing the void (chord paths stay inside the walls)
+    local comets = {}
+    local cometN = isTouch and 3 or 5
+    for i = 1, cometN do
+        local c = part({
+            Name         = "BH_Comet",
+            Size         = Vector3.new(0.9, 0.9, 26),
+            Color        = C_ICE,
+            Transparency = 1,
+            CFrame       = CFrame.new(HOLE),
+        })
+        comets[i] = {
+            part  = c,
+            trail = addTrail(c, C_ICE),
+            dir   = randomUnit(),
+            from  = HOLE + randomUnit() * (340 + math.random() * 90),
+            prog  = 0,
+            spd   = 0.35 + math.random() * 0.3,
+            wait  = 1 + math.random() * 7,
+        }
+        comets[i].trail.Enabled = false -- parked invisible: no stray streak
     end
 
     -- relativistic polar jets (quasar beams up + down)
@@ -639,21 +706,23 @@ local function main()
     end
 
     --[[ per-frame updates ]]--
+    local photonBase = CFrame.new(HOLE) * photonTilt
     local function updatePhoton(t)
         for i = 1, PHOTON_N do
             local a = (i / PHOTON_N) * math.pi * 2 + t * 0.22
-            photonSegs[i].Transparency = 0.02 + 0.08 * math.sin(t * 3 + i * 0.9)
-            photonSegs[i].CFrame = CFrame.new(HOLE) * photonTilt
+            photonSegs[i].Transparency = math.max(0, 0.06 * math.sin(t * 3 + i * 0.9))
+            photonSegs[i].CFrame = photonBase
                 * CFrame.Angles(0, a, 0)
                 * CFrame.new(15, 0, 0)
         end
     end
 
+    local lensBase = CFrame.new(HOLE) * lensTilt
     local function updateLens(t)
         for i = 1, LENS_N do
             local a = (i / LENS_N) * math.pi * 2 - t * 0.14
-            lensSegs[i].Transparency = 0.40 + 0.14 * math.sin(t * 2 + i * 1.3)
-            lensSegs[i].CFrame = CFrame.new(HOLE) * lensTilt
+            lensSegs[i].Transparency = 0.34 + 0.12 * math.sin(t * 2 + i * 1.3)
+            lensSegs[i].CFrame = lensBase
                 * CFrame.Angles(0, a, 0)
                 * CFrame.new(18.5, 0, 0)
         end
@@ -661,17 +730,55 @@ local function main()
 
     local function updateTwinkle(t)
         for _, tk in ipairs(twinkle) do
-            tk.part.Transparency = 0.12 + 0.3 * (0.5 + 0.5 * math.sin(t * 2.5 + tk.phase))
+            if not tk.star.sucked then
+                tk.part.Transparency = 0.12 + 0.3 * (0.5 + 0.5 * math.sin(t * 2.5 + tk.phase))
+            end
         end
     end
 
+    local function updateComets(dt)
+        for _, c in ipairs(comets) do
+            if c.wait > 0 then
+                c.wait = c.wait - dt
+                if c.wait <= 0 then
+                    local fd = (c.from - HOLE).Unit -- radial dir relative to the hole, not world origin
+                    local d  = randomUnit()
+                    d = d - fd * d:Dot(fd)
+                    if d.Magnitude < 0.1 then
+                        d = fd:Cross(Vector3.yAxis)
+                        if d.Magnitude < 0.1 then
+                            d = fd:Cross(Vector3.xAxis)
+                        end
+                    end
+                    c.dir  = d.Unit
+                    c.prog = 0
+                end
+            else
+                c.prog = c.prog + dt * c.spd
+                if c.prog >= 1 then
+                    c.part.Transparency = 1
+                    c.trail.Enabled     = false
+                    c.wait = 3 + math.random() * 6
+                    c.from = HOLE + randomUnit() * (340 + math.random() * 90)
+                else
+                    local pos = c.from + c.dir * ((c.prog - 0.5) * 520)
+                    c.trail.Enabled     = true
+                    c.part.Transparency = 1 - 0.9 * math.sin(c.prog * math.pi) -- fades to invisible at both ends
+                    c.part.CFrame       = CFrame.lookAt(pos, pos + c.dir)
+                end
+            end
+        end
+    end
+
+    local diskBase = CFrame.new(HOLE) * diskTilt
     local function updateDisk(t)
         for _, s in ipairs(diskSegs) do
             local ring = rings[s.ring]
-            local a  = (s.i / s.n) * math.pi * 2 + t * ring.speed + s.jitter * 0.01
-            local rr = ring.r + 0.5 * math.sin(t * 1.7 + s.jitter)
-            s.part.Transparency = math.clamp(ring.base + 0.10 * math.sin(t * 3 + s.jitter), 0, 1)
-            s.part.CFrame = CFrame.new(HOLE) * diskTilt
+            local a   = (s.i / s.n) * math.pi * 2 + t * ring.speed + s.jitter * 0.01
+            local rr  = ring.r + 0.5 * math.sin(t * 1.7 + s.jitter)
+            local dop = 0.5 + 0.5 * math.cos(a - 0.9) -- relativistic beaming: one side burns brighter
+            s.part.Transparency = math.clamp(ring.base + 0.10 * math.sin(t * 3 + s.jitter) + 0.16 * (1 - dop), 0, 1)
+            s.part.CFrame = diskBase
                 * CFrame.Angles(0, a, 0)
                 * CFrame.new(rr, 0, 0)
         end
@@ -1163,7 +1270,7 @@ local function main()
         riser:Play()
         TweenService:Create(riser, TweenInfo.new(7, Enum.EasingStyle.Linear), {Volume = 0.85}):Play()
     end)
-    task.delay(50.6, function()
+    task.delay(49.8, function()
         if dead then return end
         tw(blackout, {BackgroundTransparency = 0}, 1.2)
     end)
@@ -1254,6 +1361,7 @@ local function main()
         updateHotspots(t, dt)
         updateFlares(dt, t)
         updateJets(t, dive)
+        updateComets(dt)
 
         shockPulse = shockPulse * (1 - dt * 2.2)
         glowPulse  = glowPulse * (1 - dt * 3)
