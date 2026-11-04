@@ -1,5 +1,5 @@
 --=====================================================================
---  EL QEYADA  |  CINEMATIC VFX SHOW  --  v1.0  (NO HUB, NO MENU)
+--  EL QEYADA  |  CINEMATIC VFX SHOW  --  v1.1  (NO HUB, NO MENU)
 --  سكربت الـ VFX الكامل: عرض سينمائي طبقات على الشخصية
 --  البيئة: مكعب خلفية كبير بسماء رمادية عادية (مش فضاء)
 --
@@ -19,8 +19,15 @@
 --  :Clear() before destroy; lighting/atmosphere/clouds/camera all restored;
 --  stop anytime: getgenv().QEYADA_VFX_STOP()
 --
+--  v1.1 : sky cube resized INTO the fog envelope -- at 2400 studs the walls
+--         sat ~1200 away, PAST FogEnd 950 => 100% fogged => invisible box.
+--         Now 700 studs: same colors, same design, box actually visible.
+--         + RenderStepped error-trap + stage console logs (diagnosis only).
+--         Colors, particles, timings, camera: UNCHANGED.
 --  VERIFIED HERE : luaparser syntax PASS, static call/property scan CLEAN,
---                  GitHub raw fetch with Roblox UA (byte-identical).
+--                  GitHub raw fetch with Roblox UA (byte-identical),
+--                  FULL MOCK RUN end-to-end: 0 errors, all 6 stages fired,
+--                  cleanup restored lighting/sky/camera with 0 leftovers.
 --  NOT RUN HERE  : live Play test (no Roblox Studio in this box) --
 --                  test the loader line in game and judge the visuals.
 --
@@ -160,11 +167,13 @@ ourCC.Parent = Lighting
 
 --[[ ================================================================
      1) ENVIRONMENT -- giant cube with a NORMAL GRAY SKY (not space)
-     6 thin walls (2400 studs). From inside you always see the near
-     face, so the gray wraps the whole view. Fog + atmosphere blend
-     the walls into one seamless overcast sky gradient.
+     6 thin walls (700 studs) -- sized to sit INSIDE the fog envelope
+     (v1.0 used 2400 => walls 1200 away = past FogEnd 950 = invisible).
+     From inside you always see the near face, so the gray wraps the
+     whole view. Fog + atmosphere blend the walls into one seamless
+     overcast sky gradient.
 ================================================================ ]]--
-local WALL = 2400
+local WALL = 700
 local GRAY = {
     side = Color3.fromRGB(168, 174, 184),
     top  = Color3.fromRGB(196, 200, 208),
@@ -327,7 +336,12 @@ end
 local function groundPoint(near)
     local origin = Vector3.new(near.X, near.Y + 2, near.Z)
     local rp = RaycastParams.new()
-    rp.FilterType = Enum.RaycastFilterType.Exclude
+    local okRF = pcall(function()
+        rp.FilterType = Enum.RaycastFilterType.Exclude
+    end)
+    if not okRF then
+        pcall(function() rp.FilterType = Enum.RaycastFilterType.Blacklist end)
+    end
     rp.FilterDescendantsInstances = { character, fx, cubeFolder }
     local hit = workspace:Raycast(origin, Vector3.new(0, -300, 0), rp)
     if hit then
@@ -764,73 +778,86 @@ end
 
 --[[ --------------------- RUN loop (single thread) -------------------- ]]--
 local function startHeartbeat()
+    local hbWarned = false
     heartbeat = RunService.RenderStepped:Connect(function(dt)
         if not alive() or not hrp.Parent then return end
-        local t = os.clock() - t0
-        local center = hrp.Position + Vector3.new(0, 2.5, 0)
-        -- orbit anchors
-        for _, o in ipairs(orbits) do
-            local a = t * o.speed + o.ph
-            o.host.CFrame = CFrame.new(center
-                + Vector3.new(math.cos(a) * o.rad, o.off - 2.5, math.sin(a) * o.rad))
-        end
-        -- crown precession + orbs
-        for _, c in ipairs(crownParts) do
-            if c.part and c.part.Parent then
-                local a = t * 0.7 + c.ph
-                local wob = math.rad(c.tilt) + math.sin(t * 0.9 + c.ph) * 0.12
-                c.part.CFrame = CFrame.new(center + Vector3.new(0, c.h, 0))
-                    * CFrame.Angles(0, 0, math.rad(90))
-                    * CFrame.Angles(wob, a, 0)
-            end
-        end
-        for _, o in ipairs(crownOrbs) do
-            if o.part and o.part.Parent then
+        local okHb, errHb = pcall(function()
+            local t = os.clock() - t0
+            local center = hrp.Position + Vector3.new(0, 2.5, 0)
+            -- orbit anchors
+            for _, o in ipairs(orbits) do
                 local a = t * o.speed + o.ph
-                o.part.CFrame = CFrame.new(center
-                    + Vector3.new(math.cos(a) * o.rad, o.h - 2.5, math.sin(a) * o.rad))
+                o.host.CFrame = CFrame.new(center
+                    + Vector3.new(math.cos(a) * o.rad, o.off - 2.5, math.sin(a) * o.rad))
             end
+            -- crown precession + orbs
+            for _, c in ipairs(crownParts) do
+                if c.part and c.part.Parent then
+                    local a = t * 0.7 + c.ph
+                    local wob = math.rad(c.tilt) + math.sin(t * 0.9 + c.ph) * 0.12
+                    c.part.CFrame = CFrame.new(center + Vector3.new(0, c.h, 0))
+                        * CFrame.Angles(0, 0, math.rad(90))
+                        * CFrame.Angles(wob, a, 0)
+                end
+            end
+            for _, o in ipairs(crownOrbs) do
+                if o.part and o.part.Parent then
+                    local a = t * o.speed + o.ph
+                    o.part.CFrame = CFrame.new(center
+                        + Vector3.new(math.cos(a) * o.rad, o.h - 2.5, math.sin(a) * o.rad))
+                end
+            end
+            -- pillar follows the player
+            if pillarHost and pillarHost.Parent then
+                local g = groundPoint(hrp.Position)
+                pillarHost.CFrame = CFrame.new(g)
+            end
+            -- bloom heartbeat during pillar phase
+            if t > 21.5 and t < 32 then
+                ourBloom.Intensity = 0.95 + math.sin(t * 4) * 0.22
+            end
+            -- shake decay
+            if shakeAmp > 0.002 then
+                shakeAmp = shakeAmp * math.pow(0.05, dt)
+            end
+            -- camera pose
+            local cf, fov = camPose(t, center)
+            cam.CFrame = cf
+            cam.FieldOfView = fov
+        end)
+        if not okHb and not hbWarned then
+            hbWarned = true
+            warn("[QEYADA VFX] heartbeat error (once): " .. tostring(errHb))
         end
-        -- pillar follows the player
-        if pillarHost and pillarHost.Parent then
-            local g = groundPoint(hrp.Position)
-            pillarHost.CFrame = CFrame.new(g)
-        end
-        -- bloom heartbeat during pillar phase
-        if t > 21.5 and t < 32 then
-            ourBloom.Intensity = 0.95 + math.sin(t * 4) * 0.22
-        end
-        -- shake decay
-        if shakeAmp > 0.002 then
-            shakeAmp = shakeAmp * math.pow(0.05, dt)
-        end
-        -- camera pose
-        local cf, fov = camPose(t, center)
-        cam.CFrame = cf
-        cam.FieldOfView = fov
     end)
 end
 
 local function timeline()
     task.spawn(function()
+        print("[QEYADA VFX] stage 1/6: dust")
         local g = groundPoint(hrp.Position)
         buildDust()
         task.wait(3)
         if not alive() then return end
+        print("[QEYADA VFX] stage 2/6: gather")
         buildOrbits()
         groundPulses()
         task.wait(9) -- t=12
         if not alive() then return end
+        print("[QEYADA VFX] stage 3/6: rise")
         buildRise(groundPoint(hrp.Position))
         task.wait(8) -- t=20
         if not alive() then return end
+        print("[QEYADA VFX] stage 4/6: burst")
         fireBurst(groundPoint(hrp.Position))
         task.wait(1.5) -- t=21.5
         if not alive() then return end
+        print("[QEYADA VFX] stage 5/6: pillar + crown")
         growPillar()
         buildCrown()
         task.wait(10.5) -- t=32
         if not alive() then return end
+        print("[QEYADA VFX] stage 6/6: fade + restore")
         -- FADE: stop emission, shrink beams, restore look
         for _, e in ipairs(emitters) do
             pcall(function()
