@@ -1,14 +1,16 @@
 --=====================================================================
---  EL QEYADA  |  INTRO LOADER  v1.0  --  DELTA / MOBILE READY
+--  EL QEYADA  |  INTRO LOADER  v1.1  --  DELTA / MOBILE READY
 --
---  اللودر نفسه مبيعرضش أي حاجة: لا بوكس ولا أنميشن ولا UI --
---  وظيفته الوحيدة: يجيب سكربت الـ VFX الأصلي من GitHub ويشغّله
---  زي ما هو حرفياً بدون أي تعديل. البوكس والإضاءة والأنميشن
---  كلها جاية من سكربت الـ VFX الأصلي نفسه مش من اللودر.
+--  v1.1: اللودر دلوقتي بيحمّل ملفك انت: KING_AngelAura_VFX.lua
+--  (بناء حرفيا 1:1 من "new angel aura reworked.rbxm" الي انت اديهولي)
+--  مش السينماتيك بتاعي. الاورا والجنح والسيف والأنميشن كلهم من ملفك.
+--
+--  اللودر نفسه مبيعرضش أي حاجة: لا بوكس ولا UI --
+--  وظيفته الوحيدة: يجيب سكربت الـ VFX من GitHub ويشغّله
+--  زي ما هو حرفياً بدون أي تعديل.
 --
 --  معلومة (صح انت كده): كله LOCAL على جهازك انت بس --
---  سكربتات الإكزكيوتور بتشتغل على كلاينتك انت بس، فمحدش
---  في السيرفر هيشوف البوكس ولا الأنميشن. مثالي كـ INTRO شخصي.
+--  مثالي كـ INTRO شخصي، محدش في السيرفر هيشوف حاجة.
 --
 --  Run (Delta / mobile / PC):
 --  loadstring(game:HttpGet("https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/QEYADA_VFX_Loader.lua"))()
@@ -16,12 +18,13 @@
 --  * re-run at any time: the VFX kills its old show first (never stacks)
 --  * Delta autoexec OK: the VFX waits for your character, intro plays on spawn
 --  * this loader has ZERO UI: status goes to console only (print / warn)
+--  * لو حصلت مشكلة، الـ VFX نفسه هيكتب الخطأ بالأحمر على الشاشة
 --
---  stop the show anytime: getgenv().QEYADA_VFX_STOP()
+--  stop the show anytime: getgenv().KING_AURA_STOP()
 --=====================================================================
 
-local VFX_URL = "https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/QEYADA_VFX_Cinematic.lua"
-local MARK    = "EL QEYADA"   -- must exist inside the genuine VFX source
+local VFX_URL = "https://raw.githubusercontent.com/Alaqrabaty-Soveti/LEGENDS-Intro/main/KING_AngelAura_VFX.lua"
+local MARK    = "KING AURA"   -- must exist inside the genuine VFX source
 
 local genv = (typeof(getgenv) == "function" and getgenv()) or _G
 
@@ -69,13 +72,13 @@ end
 
 if not string.find(src, MARK, 1, true) then
     genv.QEYADA_LOADER_BUSY = false
-    warn("[QEYADA LOADER] FAIL: downloaded file is not the EL QEYADA VFX")
+    warn("[QEYADA LOADER] FAIL: downloaded file is not the KING aura VFX")
     return
 end
 
 print("[QEYADA LOADER] source OK (" .. #src .. " chars) - starting intro ...")
 
-local fn, cerr = (loadstring or load)(src, "=QEYADA_VFX_Cinematic")
+local fn, cerr = (loadstring or load)(src, "=KING_AngelAura_VFX")
 if type(fn) ~= "function" then
     genv.QEYADA_LOADER_BUSY = false
     warn("[QEYADA LOADER] FAIL: compile error -> " .. tostring(cerr))
@@ -87,7 +90,7 @@ genv.QEYADA_LOADER_BUSY = false
 
 local ok, rerr = pcall(fn)
 if ok then
-    print("[QEYADA LOADER] intro running (your screen only) | stop: getgenv().QEYADA_VFX_STOP()")
+    print("[QEYADA LOADER] intro running (your screen only) | stop: getgenv().KING_AURA_STOP()")
 else
     warn("[QEYADA LOADER] runtime error -> " .. tostring(rerr))
     warn("[QEYADA LOADER] re-run the loader to try again")
