@@ -1,5 +1,5 @@
 --=====================================================================
---  KING  |  ANGEL AURA VFX  --  full 1:1 rebuild loader (Delta-ready)
+--  KING  |  ANGEL AURA VFX  --  1:1 rebuild loader v1.1 (Delta-ready, self-reporting)
 --  بناء حرفيا من "new angel aura reworked.rbxm" (تفكيك binary كامل)
 --
 --  * نفس الشجرة والكلاسات ونفس قيم الخصائص بالظبط:
@@ -119,24 +119,102 @@ local ECFG = {
 	},
 }
 
+print("[KING AURA] v1.1 starting...")
+
+-- on-screen failure reporter: read the text and send it back
+local function reportError(msg)
+        print("[KING AURA] FAILED: " .. tostring(msg))
+        pcall(function()
+                local gui = Instance.new("ScreenGui")
+                gui.Name = "KING_AURA_ERR"
+                gui.DisplayOrder = 999999
+                gui.ResetOnSpawn = false
+                local okp = pcall(function() gui.Parent = game:GetService("CoreGui") end)
+                if not okp or not gui.Parent then
+                        local pg = Players.LocalPlayer
+                            and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                        if pg then gui.Parent = pg end
+                end
+                local tl = Instance.new("TextLabel")
+                tl.AnchorPoint = Vector2.new(0.5, 0)
+                tl.Position = UDim2.new(0.5, 0, 0, 70)
+                tl.Size = UDim2.new(0, 620, 0, 110)
+                tl.BackgroundColor3 = Color3.fromRGB(64, 14, 14)
+                tl.BackgroundTransparency = 0.1
+                tl.TextColor3 = Color3.fromRGB(255, 214, 214)
+                tl.Font = Enum.Font.GothamMedium
+                tl.TextSize = 14
+                tl.TextWrapped = true
+                tl.BorderSizePixel = 0
+                tl.Text = "KING AURA ERROR: " .. tostring(msg)
+                tl.Parent = gui
+                task.delay(15, function() pcall(function() gui:Destroy() end) end)
+        end)
+end
+
+local function toastOK()
+        pcall(function()
+                local gui = Instance.new("ScreenGui")
+                gui.Name = "KING_AURA_OK"
+                gui.DisplayOrder = 999999
+                gui.ResetOnSpawn = false
+                local okp = pcall(function() gui.Parent = game:GetService("CoreGui") end)
+                if not okp or not gui.Parent then
+                        local pg = Players.LocalPlayer
+                            and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+                        if pg then gui.Parent = pg end
+                end
+                local tl = Instance.new("TextLabel")
+                tl.AnchorPoint = Vector2.new(0.5, 0)
+                tl.Position = UDim2.new(0.5, 0, 0, 70)
+                tl.Size = UDim2.new(0, 380, 0, 36)
+                tl.BackgroundColor3 = Color3.fromRGB(16, 46, 22)
+                tl.BackgroundTransparency = 0.1
+                tl.TextColor3 = Color3.fromRGB(214, 255, 224)
+                tl.Font = Enum.Font.GothamBold
+                tl.TextSize = 15
+                tl.BorderSizePixel = 0
+                tl.Text = "KING AURA اشتغل - الملف اتبنى كامل"
+                tl.Parent = gui
+                task.delay(3.5, function() pcall(function() gui:Destroy() end) end)
+        end)
+end
+
+-- one bad emitter property must not kill the whole show
+local WARN_COUNT = 0
 local function applyEmitter(em, idx)
         for _, s in ipairs(ECFG[idx]) do
-                em[s.p] = s.v
+                local okp, errp = pcall(function() em[s.p] = s.v end)
+                if not okp and WARN_COUNT < 3 then
+                        WARN_COUNT = WARN_COUNT + 1
+                        warn("[KING AURA] emitter prop skipped: "
+                            .. tostring(s.p) .. " -> " .. tostring(errp))
+                end
         end
 end
 
--- Chastiefol sword: MeshPart.MeshId is engine-protected -> fetch real asset
+-- Chastiefol sword: fetch with a hard 3s timeout (GetObjects must never hang)
 local SWORD_MESH_ID = "rbxassetid://93212817190277"
 local SWORD_PART = nil
-pcall(function()
-        local objs = game:GetObjects(SWORD_MESH_ID)
-        for _, o in ipairs(objs) do
-                if o:IsA("MeshPart") then
-                        SWORD_PART = o
-                        break
-                end
+do
+        local done = false
+        task.spawn(function()
+                pcall(function()
+                        local objs = game:GetObjects(SWORD_MESH_ID)
+                        for _, o in ipairs(objs) do
+                                if o:IsA("MeshPart") then
+                                        SWORD_PART = o
+                                        break
+                                end
+                        end
+                end)
+                done = true
+        end)
+        local t0 = os.clock()
+        while not done and os.clock() - t0 < 3 do
+                task.wait(0.05)
         end
-end)
+end
 if not SWORD_PART then
         SWORD_PART = Instance.new("MeshPart") -- fallback (flat color, see notes)
 end
@@ -144,6 +222,9 @@ end
 local model = Instance.new("Model")
 local INST = {} -- authored parse-id -> instance, for exact ref wiring
 local REFQ = {} -- deferred references
+
+-- EVERYTHING below is wrapped: any failure shows its exact message on screen
+local okB, errB = pcall(function()
 
 -- Model 'KING' (id 0)
 local i0 = Instance.new("Model")
@@ -1136,14 +1217,32 @@ end
 
 local player = Players.LocalPlayer
 local char = player and player.Character
+if not char and player then
+        local t0 = os.clock()
+        while not char and os.clock() - t0 < 5 do
+                task.wait(0.1)
+                char = player.Character
+        end
+end
 local phrp = char and char:FindFirstChild("HumanoidRootPart")
+if not phrp and char then
+        phrp = char:WaitForChild("HumanoidRootPart", 5)
+end
 local base
 if phrp then
         local look = phrp.CFrame.LookVector
-        local eye = phrp.Position + Vector3.new(look.X, 0, look.Z).Unit * 7
+        local flat = Vector3.new(look.X, 0, look.Z)
+        if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, -1) end
+        local eye = phrp.Position + flat.Unit * 7
         base = CFrame.lookAt(
                 Vector3.new(eye.X, phrp.Position.Y, eye.Z),
                 Vector3.new(phrp.Position.X, phrp.Position.Y, phrp.Position.Z))
+elseif workspace.CurrentCamera then
+        local cc = workspace.CurrentCamera.CFrame
+        base = CFrame.lookAt(
+                cc.Position + Vector3.new(cc.LookVector.X, 0, cc.LookVector.Z).Unit * 12
+                    + Vector3.new(0, -2, 0),
+                cc.Position + Vector3.new(0, -2, 0))
 else
         base = pivotCF
 end
@@ -1181,14 +1280,30 @@ pcall(function()
 end)
 if not ranOK then
         task.spawn(function()
-                local npc = INST[1].Parent
-                local humanoid = npc:WaitForChild("Humanoid")
-                local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-                local idleTrack = animator:LoadAnimation(INST[1].IdleAnim)
-                idleTrack.Priority = Enum.AnimationPriority.Idle
-                idleTrack.Looped = true
-                idleTrack:Play()
+                local okAnim, errAnim = pcall(function()
+                        local npc = INST[1].Parent
+                        local humanoid = npc:WaitForChild("Humanoid")
+                        local animator = humanoid:FindFirstChildOfClass("Animator")
+                            or Instance.new("Animator", humanoid)
+                        local idleTrack = animator:LoadAnimation(INST[1].IdleAnim)
+                        idleTrack.Priority = Enum.AnimationPriority.Idle
+                        idleTrack.Looped = true
+                        idleTrack:Play()
+                end)
+                if not okAnim then
+                        warn("[KING AURA] animation failed (rig still shows): "
+                            .. tostring(errAnim))
+                end
         end)
+end
+end) -- close the big protective pcall
+
+if okB then
+        toastOK()
+        print("[KING AURA] rebuilt 1:1 | emitters=56 | stop: getgenv().KING_AURA_STOP()")
+else
+        reportError(errB)
+        pcall(function() model:Destroy() end) -- no half-built leftovers
 end
 
 local PRELOAD = {
@@ -1223,12 +1338,10 @@ task.spawn(function()
         pcall(function() ContentProvider:PreloadAsync(list) end)
 end)
 
-print("[KING AURA] rebuilt 1:1 | emitters=56 | stop: getgenv().KING_AURA_STOP()")
-
+-- stop is ALWAYS available, success or failure
 genv.KING_AURA_STOP = function()
         if genv.KING_AURA_TOKEN ~= myToken then return end
         genv.KING_AURA_TOKEN = nil
         pcall(function() model:Destroy() end)
         print("[KING AURA] stopped - model destroyed")
 end
-
